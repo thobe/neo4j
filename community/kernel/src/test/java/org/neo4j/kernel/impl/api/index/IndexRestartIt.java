@@ -19,19 +19,6 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import static org.hamcrest.CoreMatchers.not;
-import static org.hamcrest.core.IsEqual.equalTo;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-import static org.mockito.Mockito.mock;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.single;
-import static org.neo4j.kernel.api.index.InternalIndexState.ONLINE;
-import static org.neo4j.kernel.api.index.InternalIndexState.POPULATING;
-import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
-import static org.neo4j.test.DoubleLatch.awaitLatch;
-
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.concurrent.CountDownLatch;
@@ -54,6 +41,19 @@ import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
+import static org.hamcrest.CoreMatchers.not;
+import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.single;
+import static org.neo4j.kernel.api.index.InternalIndexState.ONLINE;
+import static org.neo4j.kernel.api.index.InternalIndexState.POPULATING;
+import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
+import static org.neo4j.test.DoubleLatch.awaitLatch;
+
 public class IndexRestartIt
 {
     @Test
@@ -72,10 +72,20 @@ public class IndexRestartIt
         startDb();
 
         // Then
-        IndexDefinition index = getSingleIndex();
-        assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.ONLINE ) );
-        assertEquals( 1, provider.populatorCallCount.get() );
-        assertEquals( 2, provider.writerCallCount.get() );
+        Transaction tx = db.beginTx();
+        try
+        {
+            IndexDefinition index = getSingleIndex();
+            assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.ONLINE ) );
+            assertEquals( 1, provider.populatorCallCount.get() );
+            assertEquals( 2, provider.writerCallCount.get() );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test
@@ -92,9 +102,19 @@ public class IndexRestartIt
         // When
         startDb();
 
-        IndexDefinition index = getSingleIndex();
-        assertThat( db.schema().getIndexState( index), not( equalTo( Schema.IndexState.FAILED ) ) );
-        assertEquals( 2, provider.populatorCallCount.get() );
+        Transaction tx = db.beginTx();
+        try
+        {
+            IndexDefinition index = getSingleIndex();
+            assertThat( db.schema().getIndexState( index), not( equalTo( Schema.IndexState.FAILED ) ) );
+            assertEquals( 2, provider.populatorCallCount.get() );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     private GraphDatabaseAPI db;

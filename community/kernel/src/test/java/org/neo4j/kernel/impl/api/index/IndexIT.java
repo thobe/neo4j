@@ -19,9 +19,6 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import static org.junit.Assert.*;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-
 import java.util.Set;
 
 import org.junit.After;
@@ -36,6 +33,9 @@ import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.impl.nioneo.store.IndexRule;
 import org.neo4j.test.ImpermanentGraphDatabase;
 
+import static org.junit.Assert.assertEquals;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+
 public class IndexIT
 {
 
@@ -44,7 +44,7 @@ public class IndexIT
     {
         // GIVEN
         Transaction tx = db.beginTx();
-        StatementContext statement = ctxProvider.getCtxForWriting();
+        StatementContext statement = ctxProvider.getStatementContext();
         long labelId = 5, propertyKey = 8;
 
         // WHEN
@@ -63,7 +63,7 @@ public class IndexIT
     {
         // GIVEN
         Transaction tx = db.beginTx();
-        StatementContext statement = ctxProvider.getCtxForWriting();
+        StatementContext statement = ctxProvider.getStatementContext();
         long labelId = 5, propertyKey = 8;
 
         // WHEN
@@ -72,10 +72,12 @@ public class IndexIT
         tx.finish();
 
         // THEN
-        statement = ctxProvider.getCtxForReading();
+        tx = db.beginTx();
+        statement = ctxProvider.getStatementContext();
         assertEquals( asSet( expectedRule ),
                 asSet( statement.getIndexRules( labelId ) ) );
         assertEquals( expectedRule , statement.getIndexRule( labelId, propertyKey ) );
+        tx.finish();
     }
 
     @Test
@@ -84,14 +86,14 @@ public class IndexIT
         // GIVEN
         long labelId = 5, propertyKey = 8;
         Transaction tx = db.beginTx();
-        StatementContext statement = ctxProvider.getCtxForWriting();
+        StatementContext statement = ctxProvider.getStatementContext();
         IndexRule existingRule = statement.addIndexRule( labelId, propertyKey );
         tx.success();
         tx.finish();
 
         // WHEN
         tx = db.beginTx();
-        statement = ctxProvider.getCtxForWriting();
+        statement = ctxProvider.getStatementContext();
         long propertyKey2 = 10;
         IndexRule addedRule = statement.addIndexRule( labelId, propertyKey2 );
         Set<IndexRule> indexRulesInTx = asSet( statement.getIndexRules( labelId ) );
@@ -108,7 +110,7 @@ public class IndexIT
         // GIVEN
         long labelId = 5, propertyKey = 11;
         Transaction tx = db.beginTx();
-        StatementContext statement = ctxProvider.getCtxForWriting();
+        StatementContext statement = ctxProvider.getStatementContext();
 
         // WHEN
         statement.addIndexRule( labelId, propertyKey );
@@ -116,25 +118,37 @@ public class IndexIT
         tx.finish();
 
         // THEN
-        assertEquals( asSet(), asSet( ctxProvider.getCtxForReading().getIndexRules( labelId ) ) );
+        tx = db.beginTx();
+        assertEquals( asSet(), asSet( ctxProvider.getStatementContext().getIndexRules( labelId ) ) );
+        tx.finish();
     }
 
 
     private void awaitIndexOnline( IndexRule indexRule ) throws IndexNotFoundKernelException
     {
-        StatementContext ctx = ctxProvider.getCtxForReading();
-        long start = System.currentTimeMillis();
-        while(true)
+        Transaction tx = db.beginTx();
+        try
         {
-           if(ctx.getIndexState(indexRule) == InternalIndexState.ONLINE)
-           {
-               break;
-           }
+            StatementContext ctx = ctxProvider.getStatementContext();
+            long start = System.currentTimeMillis();
+            while(true)
+            {
+                if(ctx.getIndexState(indexRule) == InternalIndexState.ONLINE)
+                {
+                    break;
+                }
 
-           if(start + 1000 * 10 < System.currentTimeMillis())
-           {
-               throw new RuntimeException( "Index didn't come online within a reasonable time." );
-           }
+                if(start + 1000 * 10 < System.currentTimeMillis())
+                {
+                    throw new RuntimeException( "Index didn't come online within a reasonable time." );
+                }
+            }
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
         }
     }
 

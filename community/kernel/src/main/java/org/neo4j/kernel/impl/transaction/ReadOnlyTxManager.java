@@ -327,11 +327,8 @@ public class ReadOnlyTxManager extends AbstractTransactionManager
     @Override
     public StatementContext getStatementContext()
     {
-        if(readOnlyStatementContext == null)
-        {
-            readOnlyStatementContext = kernel.newReadOnlyStatementContext();
-        }
-        return readOnlyStatementContext;
+        Transaction tx = getTransaction();
+        return tx != null ? ((TransactionImpl)tx).getCurrentStatementContext() : null;
     }
 
     @Override

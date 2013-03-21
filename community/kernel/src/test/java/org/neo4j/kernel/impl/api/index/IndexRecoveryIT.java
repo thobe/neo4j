@@ -19,20 +19,6 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import static java.util.concurrent.Executors.newSingleThreadExecutor;
-import static org.hamcrest.core.IsEqual.equalTo;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.single;
-import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
-
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
@@ -65,6 +51,20 @@ import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
+import static java.util.concurrent.Executors.newSingleThreadExecutor;
+import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThat;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.single;
+import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
+
 public class IndexRecoveryIT
 {
     @Test
@@ -90,15 +90,25 @@ public class IndexRecoveryIT
         startDb();
 
         // Then
-        Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
 
-        assertThat( indexes.size(), equalTo( 1 ) );
+            assertThat( indexes.size(), equalTo( 1 ) );
 
-        IndexDefinition index = single( indexes );
-        assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.POPULATING ) );
-        verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
-        verify( mockedIndexProvider, times( 0 ) ).getOnlineAccessor( anyLong() );
-        latch.countDown();
+            IndexDefinition index = single( indexes );
+            assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.POPULATING ) );
+            verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
+            verify( mockedIndexProvider, times( 0 ) ).getOnlineAccessor( anyLong() );
+            latch.countDown();
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test
@@ -125,15 +135,25 @@ public class IndexRecoveryIT
         startDb();
 
         // Then
-        Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
 
-        assertThat( indexes.size(), equalTo( 1 ) );
+            assertThat( indexes.size(), equalTo( 1 ) );
 
-        IndexDefinition index = single( indexes );
-        assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.POPULATING ) );
-        verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
-        verify( mockedIndexProvider, times( 0 ) ).getOnlineAccessor( anyLong() );
-        latch.countDown();
+            IndexDefinition index = single( indexes );
+            assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.POPULATING ) );
+            verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
+            verify( mockedIndexProvider, times( 0 ) ).getOnlineAccessor( anyLong() );
+            latch.countDown();
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
     
     @Test
@@ -156,15 +176,25 @@ public class IndexRecoveryIT
         startDb();
 
         // Then
-        Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
 
-        assertThat( indexes.size(), equalTo( 1 ) );
+            assertThat( indexes.size(), equalTo( 1 ) );
 
-        IndexDefinition index = single( indexes );
-        assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.ONLINE ) );
-        verify( mockedIndexProvider, times( 1 ) ).getPopulator( anyLong() );
-        verify( mockedIndexProvider, times( 1 ) ).getOnlineAccessor( anyLong() );
-        assertEquals( expectedUpdates, writer.updates ); 
+            IndexDefinition index = single( indexes );
+            assertThat( db.schema().getIndexState( index), equalTo( Schema.IndexState.ONLINE ) );
+            verify( mockedIndexProvider, times( 1 ) ).getPopulator( anyLong() );
+            verify( mockedIndexProvider, times( 1 ) ).getOnlineAccessor( anyLong() );
+            assertEquals( expectedUpdates, writer.updates );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
     
     @Test
@@ -184,13 +214,23 @@ public class IndexRecoveryIT
         startDb();
 
         // Then
-        Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            Collection<IndexDefinition> indexes = asCollection( db.schema().getIndexes( myLabel ) );
 
-        assertThat( indexes.size(), equalTo( 1 ) );
+            assertThat( indexes.size(), equalTo( 1 ) );
 
-        IndexDefinition index = single( indexes );
-        assertThat( db.schema().getIndexState( index ), equalTo( Schema.IndexState.FAILED ) );
-        verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
+            IndexDefinition index = single( indexes );
+            assertThat( db.schema().getIndexState( index ), equalTo( Schema.IndexState.FAILED ) );
+            verify( mockedIndexProvider, times( 2 ) ).getPopulator( anyLong() );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
     
     private GraphDatabaseAPI db;
@@ -271,7 +311,7 @@ public class IndexRecoveryIT
         try
         {
             StatementContext context = db.getDependencyResolver().resolveDependency(
-                    ThreadToStatementContextBridge.class ).getCtxForWriting();
+                    ThreadToStatementContextBridge.class ).getStatementContext();
             for ( int number : new int[] {4, 10} )
             {
                 Node node = db.createNode( label );

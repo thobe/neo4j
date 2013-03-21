@@ -27,7 +27,6 @@ import org.neo4j.graphdb._
 import org.neo4j.test.ImpermanentGraphDatabase
 import org.neo4j.kernel.ThreadToStatementContextBridge
 import org.neo4j.kernel.api.StatementContext
-import org.neo4j.graphdb.DynamicLabel._
 import org.neo4j.kernel.GraphDatabaseAPI
 
 class GraphDatabaseTestBase extends JUnitSuite {
@@ -105,7 +104,7 @@ class GraphDatabaseTestBase extends JUnitSuite {
     val ctx = graph
       .getDependencyResolver
       .resolveDependency(classOf[ThreadToStatementContextBridge])
-      .getCtxForWriting
+      .getStatementContext
     val result = f(ctx)
     tx.success()
     tx.finish()

@@ -19,16 +19,6 @@
  */
 package org.neo4j.kernel.impl.nioneo.store;
 
-import static java.util.Arrays.asList;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.arrayAsCollection;
-import static org.neo4j.test.TargetDirectory.forTest;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -57,6 +47,16 @@ import org.neo4j.test.ProcessStreamHandler;
 import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import org.neo4j.test.impl.EphemeralFileSystemAbstraction;
+
+import static java.util.Arrays.asList;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.arrayAsCollection;
+import static org.neo4j.test.TargetDirectory.forTest;
 
 public class TestGraphProperties
 {
@@ -318,7 +318,7 @@ public class TestGraphProperties
         removeLastNeoStoreRecord( fileSystem, storeDir );
         GraphDatabaseAPI db = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase( storeDir );
         PropertyContainer properties = db.getNodeManager().getGraphProperties();
-        assertFalse( properties.getPropertyKeys().iterator().hasNext() );
+        assertFalse( "should have no graph properties", properties.getPropertyKeys().iterator().hasNext() );
         Transaction tx = db.beginTx();
         properties.setProperty( "a property", "a value" );
         tx.success();

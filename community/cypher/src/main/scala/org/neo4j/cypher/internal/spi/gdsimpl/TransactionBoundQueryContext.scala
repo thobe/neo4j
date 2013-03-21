@@ -35,7 +35,7 @@ class TransactionBoundQueryContext(graph: GraphDatabaseAPI) extends QueryContext
   private val ctx: StatementContext = graph
     .getDependencyResolver
     .resolveDependency(classOf[ThreadToStatementContextBridge])
-    .getCtxForWriting
+    .getStatementContext
 
   def setLabelsOnNode(node: Long, labelIds: Iterable[Long]): Int = labelIds.foldLeft(0) {
     case (count, labelId) => if (ctx.addLabelToNode(labelId, node)) count + 1 else count

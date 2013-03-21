@@ -19,13 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static java.lang.String.format;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.graphdb.schema.Schema.IndexState.*;
-import static org.neo4j.helpers.collection.Iterables.empty;
-import static org.neo4j.helpers.collection.Iterables.map;
-import static org.neo4j.helpers.collection.IteratorUtil.single;
-
 import java.util.concurrent.TimeUnit;
 
 import org.neo4j.graphdb.Label;
@@ -42,6 +35,15 @@ import org.neo4j.kernel.api.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.impl.core.KeyHolder;
 import org.neo4j.kernel.impl.core.PropertyIndex;
 import org.neo4j.kernel.impl.nioneo.store.IndexRule;
+
+import static java.lang.String.format;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.graphdb.schema.Schema.IndexState.FAILED;
+import static org.neo4j.graphdb.schema.Schema.IndexState.ONLINE;
+import static org.neo4j.graphdb.schema.Schema.IndexState.POPULATING;
+import static org.neo4j.helpers.collection.Iterables.empty;
+import static org.neo4j.helpers.collection.Iterables.map;
+import static org.neo4j.helpers.collection.IteratorUtil.single;
 
 public class SchemaImpl implements Schema
 {
@@ -63,7 +65,7 @@ public class SchemaImpl implements Schema
     @Override
     public Iterable<IndexDefinition> getIndexes( final Label label )
     {
-        StatementContext context = ctxProvider.getCtxForReading();
+        StatementContext context = ctxProvider.getStatementContext();
         try
         {
             return getIndexDefinitions( context, context.getIndexRules( context.getLabelId( label.name() ) ) );
@@ -77,7 +79,7 @@ public class SchemaImpl implements Schema
     @Override
     public Iterable<IndexDefinition> getIndexes()
     {
-        StatementContext context = ctxProvider.getCtxForReading();
+        StatementContext context = ctxProvider.getStatementContext();
         return getIndexDefinitions( context, context.getIndexRules() );
     }
     
@@ -127,7 +129,7 @@ public class SchemaImpl implements Schema
     @Override
     public IndexState getIndexState( IndexDefinition index )
     {
-        StatementContext context = ctxProvider.getCtxForReading();
+        StatementContext context = ctxProvider.getStatementContext();
         String propertyKey = single( index.getPropertyKeys() );
         try
         {

@@ -19,22 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import static java.util.Arrays.asList;
-import static java.util.concurrent.TimeUnit.SECONDS;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.graphdb.factory.GraphDatabaseSettings.cache_type;
-import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
-import static org.neo4j.helpers.collection.MapUtil.map;
-
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -60,6 +44,23 @@ import org.neo4j.kernel.impl.persistence.PersistenceManager;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.TestGraphDatabaseFactory;
+
+import static java.util.Arrays.asList;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.hamcrest.Matchers.equalTo;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.graphdb.factory.GraphDatabaseSettings.cache_type;
+import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
+import static org.neo4j.helpers.collection.MapUtil.map;
 
 public class StoreStatementContextTest
 {
@@ -451,9 +452,17 @@ public class StoreStatementContextTest
         {
             tx.finish();
         }
-        
-        db.schema().awaitIndexOnline( index, 10, SECONDS );
-        return statement.getIndexRule( statement.getLabelId( label.name() ),
-                statement.getPropertyKeyId( propertyKey ) ).getId();
+
+        tx = db.beginTx();
+        try
+        {
+            db.schema().awaitIndexOnline( index, 10, SECONDS );
+            return statement.getIndexRule( statement.getLabelId( label.name() ),
+                                           statement.getPropertyKeyId( propertyKey ) ).getId();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 }

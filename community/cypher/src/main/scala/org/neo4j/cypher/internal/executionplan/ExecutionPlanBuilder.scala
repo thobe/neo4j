@@ -113,7 +113,7 @@ class ExecutionPlanBuilder(graph: GraphDatabaseService) extends PatternGraphBuil
   private def resolveLabel(name: String) = {
     val ctx = graph.asInstanceOf[GraphDatabaseAPI]
          .getDependencyResolver.resolveDependency(classOf[ThreadToStatementContextBridge])
-         .getCtxForReading
+         .getStatementContext
     Try { ResolvedLabel(name, ctx.getLabelId(name)) }.toOption
   }
 

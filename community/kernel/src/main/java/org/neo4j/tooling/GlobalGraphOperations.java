@@ -121,7 +121,7 @@ public class GlobalGraphOperations
      */
     public Iterable<Node> getAllNodesWithLabel( Label label )
     {
-        StatementContext context = statementCtxProvider.getCtxForReading();
+        StatementContext context = statementCtxProvider.getStatementContext();
         try
         {
             long labelId = context.getLabelId( label.name() );

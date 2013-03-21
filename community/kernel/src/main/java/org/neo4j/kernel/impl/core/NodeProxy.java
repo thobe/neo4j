@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.core;
 
-import static org.neo4j.graphdb.DynamicLabel.label;
-
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -41,6 +39,8 @@ import org.neo4j.kernel.api.LabelNotFoundKernelException;
 import org.neo4j.kernel.api.StatementContext;
 import org.neo4j.kernel.impl.transaction.LockType;
 import org.neo4j.kernel.impl.traversal.OldTraverserWrapper;
+
+import static org.neo4j.graphdb.DynamicLabel.label;
 
 public class NodeProxy implements Node
 {
@@ -304,7 +304,7 @@ public class NodeProxy implements Node
     {
         try
         {
-            StatementContext ctx = statementCtxProvider.getCtxForWriting();
+            StatementContext ctx = statementCtxProvider.getStatementContext();
             ctx.addLabelToNode( ctx.getOrCreateLabelId( label.name() ), getId() );
         }
         catch ( ConstraintViolationKernelException e )
@@ -318,7 +318,7 @@ public class NodeProxy implements Node
     {
         try
         {
-            StatementContext ctx = statementCtxProvider.getCtxForWriting();
+            StatementContext ctx = statementCtxProvider.getStatementContext();
             ctx.removeLabelFromNode( ctx.getLabelId( label.name() ), getId() );
         }
         catch ( LabelNotFoundKernelException e )
@@ -332,7 +332,7 @@ public class NodeProxy implements Node
     {
         try
         {
-            StatementContext ctx = statementCtxProvider.getCtxForReading();
+            StatementContext ctx = statementCtxProvider.getStatementContext();
             return ctx.isLabelSetOnNode( ctx.getLabelId( label.name() ), getId() );
         }
         catch ( LabelNotFoundKernelException e )
@@ -344,7 +344,7 @@ public class NodeProxy implements Node
     @Override
     public Iterable<Label> getLabels()
     {
-        final StatementContext ctx = statementCtxProvider.getCtxForReading();
+        final StatementContext ctx = statementCtxProvider.getStatementContext();
         return new IterableWrapper<Label, Long>( ctx.getLabelsForNode( getId() ) )
         {
             @Override

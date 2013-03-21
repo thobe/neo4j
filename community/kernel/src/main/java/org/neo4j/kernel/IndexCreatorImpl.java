@@ -19,10 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static java.util.Arrays.asList;
-import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.single;
-
 import java.util.ArrayList;
 import java.util.Collection;
 
@@ -34,6 +30,10 @@ import org.neo4j.kernel.api.ConstraintViolationKernelException;
 import org.neo4j.kernel.api.StatementContext;
 import org.neo4j.kernel.impl.core.KeyHolder;
 import org.neo4j.kernel.impl.core.PropertyIndex;
+
+import static java.util.Arrays.asList;
+import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.single;
 
 public class IndexCreatorImpl implements IndexCreator
 {
@@ -74,7 +74,7 @@ public class IndexCreatorImpl implements IndexCreator
         if ( propertyKeys.isEmpty() )
             throw new ConstraintViolationException( "An index needs at least one property key to index" );
         
-        StatementContext context = ctxProvider.getCtxForWriting();
+        StatementContext context = ctxProvider.getStatementContext();
         try
         {
             String singlePropertyKey = single( propertyKeys );

@@ -19,6 +19,15 @@
  */
 package org.neo4j.graphdb;
 
+import java.util.concurrent.TimeUnit;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.neo4j.graphdb.schema.IndexDefinition;
+import org.neo4j.graphdb.schema.Schema;
+import org.neo4j.helpers.Function;
+import org.neo4j.test.ImpermanentDatabaseRule;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsNot.not;
 import static org.hamcrest.core.IsNull.nullValue;
@@ -28,15 +37,6 @@ import static org.junit.Assert.assertTrue;
 import static org.neo4j.helpers.collection.Iterables.map;
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 import static org.neo4j.helpers.collection.IteratorUtil.single;
-
-import java.util.concurrent.TimeUnit;
-
-import org.junit.Rule;
-import org.junit.Test;
-import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.graphdb.schema.Schema;
-import org.neo4j.helpers.Function;
-import org.neo4j.test.ImpermanentDatabaseRule;
 
 public class SchemaAcceptanceTest
 {
@@ -61,15 +61,26 @@ public class SchemaAcceptanceTest
         // When
         IndexDefinition index = createIndexRule( beansAPI, label, property );
 
-        // Then
-        assertEquals( asSet( property ), asSet( singlePropertyKey( schema.getIndexes( label ) ) ) );
-        assertTrue( asSet( schema.getIndexes( label ) ).contains( index ) );
-        
-        // Then
-        Iterable<IndexDefinition> indexes = schema.getIndexes( Labels.MY_LABEL );
+        Transaction tx = beansAPI.beginTx();
+        try
+        {
+            // Then
+            assertEquals( asSet( property ), asSet( singlePropertyKey( schema.getIndexes( label ) ) ) );
+            assertTrue( asSet( schema.getIndexes( label ) ).contains( index ) );
 
-        assertEquals( asSet( property ), asSet( singlePropertyKey( indexes ) ) );
-        schema.awaitIndexOnline( single( indexes), 5L, TimeUnit.SECONDS );
+            // Then
+            Iterable<IndexDefinition> indexes = schema.getIndexes( Labels.MY_LABEL );
+
+            assertEquals( asSet( property ), asSet( singlePropertyKey( indexes ) ) );
+            schema.awaitIndexOnline( single( indexes), 5L, TimeUnit.SECONDS );
+
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test(expected = ConstraintViolationException.class)
@@ -164,7 +175,17 @@ public class SchemaAcceptanceTest
         dropIndex( beansAPI, index );
 
         // THEN
-        assertFalse( "Index should have been deleted", asSet( beansAPI.schema().getIndexes( label ) ).contains( index ) );
+        Transaction tx = beansAPI.beginTx();
+        try
+        {
+            assertFalse( "Index should have been deleted", asSet( beansAPI.schema().getIndexes( label ) ).contains( index ) );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test(expected = ConstraintViolationException.class)
@@ -221,11 +242,21 @@ public class SchemaAcceptanceTest
         // WHEN
         IndexDefinition index = createIndexRule( beansAPI, label, property );
 
-        // PASS
-        beansAPI.schema().awaitIndexOnline( index, 1L, TimeUnit.MINUTES );
+        Transaction tx = beansAPI.beginTx();
+        try
+        {
+            // AFTER
+            beansAPI.schema().awaitIndexOnline( index, 1L, TimeUnit.MINUTES );
 
-        // THEN
-        assertEquals( Schema.IndexState.ONLINE, beansAPI.schema().getIndexState( index ) );
+            // THEN
+            assertEquals( Schema.IndexState.ONLINE, beansAPI.schema().getIndexState( index ) );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     private IndexDefinition createIndexRule( GraphDatabaseService beansAPI, Label label, String property )

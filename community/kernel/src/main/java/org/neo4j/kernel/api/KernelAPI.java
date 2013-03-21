@@ -28,9 +28,6 @@ package org.neo4j.kernel.api;
  * inside the transaction are visible in read operations for {@link StatementContext statements}
  * executed within that transaction context. Once {@link TransactionContext#finish() committed}
  * those changes are applied to the graph storage and made visible to all other transactions.
- * 
- * Read operations not associated with any particular transaction can be performed via
- * the {@link #newReadOnlyStatementContext() read-only statement context}.
  */
 public interface KernelAPI
 {
@@ -42,14 +39,4 @@ public interface KernelAPI
      * @return a new {@link TransactionContext} for modifying the underlying graph.
      */
     TransactionContext newTransactionContext();
-
-    /**
-     * Returns a {@link StatementContext context} that can be used for read operations
-     * that aren't associated with any specific transaction. Write operations on this
-     * statement will throw exception.
-     * 
-     * @return a new {@link StatementContext} used for read operations not associated
-     * with any transaction.
-     */
-    StatementContext newReadOnlyStatementContext();
 }

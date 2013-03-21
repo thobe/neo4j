@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel.impl.transaction;
 
-import static org.junit.Assert.*;
-
 import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
 
@@ -32,6 +30,9 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.test.ImpermanentDatabaseRule;
 import org.neo4j.test.OtherThreadExecutor;
+
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class ExternalTransactionControlIT
 {
@@ -61,11 +62,23 @@ public class ExternalTransactionControlIT
         Transaction jtaTx = tm.suspend();
 
         // Then
-        assertFalse("I should not be able to see the label.", node.hasLabel( Labels.MY_LABEL ));
+        org.neo4j.graphdb.Transaction tx = db.beginTx();
+        try
+        {
+            assertFalse("I should not be able to see the label.", node.hasLabel( Labels.MY_LABEL ));
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
         // And when
         tm.resume( jtaTx );
         // Then
         assertTrue("The label should be visible when I've resumed the transaction.", node.hasLabel( Labels.MY_LABEL ));
+        // Finally
+        tm.rollback();
     }
 
     @Test
@@ -82,7 +95,17 @@ public class ExternalTransactionControlIT
         tm.commit();
 
         // Then
-        assertTrue( "The label should be visible after the transaction is committed.", node.hasLabel( Labels.MY_LABEL ) );
+        org.neo4j.graphdb.Transaction tx = db.beginTx();
+        try
+        {
+            assertTrue( "The label should be visible after the transaction is committed.", node.hasLabel( Labels.MY_LABEL ) );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test

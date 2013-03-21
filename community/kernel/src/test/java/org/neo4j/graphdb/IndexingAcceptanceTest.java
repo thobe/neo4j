@@ -19,6 +19,14 @@
  */
 package org.neo4j.graphdb;
 
+import java.util.Map;
+import java.util.Set;
+
+import org.junit.Rule;
+import org.junit.Test;
+import org.neo4j.graphdb.schema.IndexDefinition;
+import org.neo4j.test.ImpermanentDatabaseRule;
+
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.junit.Assert.assertEquals;
@@ -27,14 +35,6 @@ import static org.neo4j.helpers.collection.Iterables.count;
 import static org.neo4j.helpers.collection.Iterables.single;
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 import static org.neo4j.helpers.collection.MapUtil.map;
-
-import java.util.Map;
-import java.util.Set;
-
-import org.junit.Rule;
-import org.junit.Test;
-import org.neo4j.graphdb.schema.IndexDefinition;
-import org.neo4j.test.ImpermanentDatabaseRule;
 
 public class IndexingAcceptanceTest
 {
@@ -46,7 +46,9 @@ public class IndexingAcceptanceTest
         Node myNode = createNode( beansAPI, map( "name", "Hawking" ), Labels.MY_LABEL );
 
         // When
+        Transaction tx = beansAPI.beginTx();
         Node result = single( beansAPI.findNodesByLabelAndProperty( Labels.MY_LABEL, "name", "Hawking" ) );
+        tx.finish();
 
         // Then
         assertEquals( result, myNode );
@@ -61,7 +63,9 @@ public class IndexingAcceptanceTest
         createIndex( beansAPI, Labels.MY_LABEL, "name" );
 
         // When
+        Transaction tx = beansAPI.beginTx();
         Node result = single( beansAPI.findNodesByLabelAndProperty( Labels.MY_LABEL, "name", "Hawking" ) );
+        tx.finish();
 
         // Then
         assertEquals( result, myNode );
@@ -73,13 +77,17 @@ public class IndexingAcceptanceTest
         // Given
         GraphDatabaseService beansAPI = dbRule.getGraphDatabaseService();
 
-        // When/Then
+        // When
+        Transaction tx = beansAPI.beginTx();
         Iterable<Node> result = beansAPI.findNodesByLabelAndProperty( Labels.MY_LABEL, "name", "Hawking" );
+        tx.finish();
+
+        // Then
         assertEquals( asSet(), asSet( result ) );
     }
     
     @Test
-    public void shouldSeeIndexUpdatesWhenQueryingOutsideTransaction() throws Exception
+    public void shouldSeeIndexUpdatesWhenQueryingWithinTransaction() throws Exception
     {
         // GIVEN
         GraphDatabaseService beansAPI = dbRule.getGraphDatabaseService();
@@ -87,9 +95,11 @@ public class IndexingAcceptanceTest
         Node firstNode = createNode( beansAPI, map( "name", "Mattias" ), Labels.MY_LABEL );
 
         // WHEN
+        Transaction tx = beansAPI.beginTx();
         Set<Node> firstResult = asSet( beansAPI.findNodesByLabelAndProperty( Labels.MY_LABEL, "name", "Mattias" ) );
         Node secondNode = createNode( beansAPI, map( "name", "Taylor" ), Labels.MY_LABEL );
         Set<Node> secondResult = asSet( beansAPI.findNodesByLabelAndProperty( Labels.MY_LABEL, "name", "Taylor" ) );
+        tx.finish();
 
         // THEN
         assertEquals( asSet( firstNode ), firstResult );
@@ -200,7 +210,18 @@ public class IndexingAcceptanceTest
         {
             tx.finish();
         }
-        beansAPI.schema().awaitIndexOnline( indexDef, 10, SECONDS );
+
+        tx = beansAPI.beginTx();
+        try
+        {
+            beansAPI.schema().awaitIndexOnline( indexDef, 10, SECONDS );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
         return indexDef;
     }
 }

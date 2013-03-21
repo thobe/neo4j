@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static java.util.Arrays.asList;
-
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.schema.IndexDefinition;
@@ -30,6 +28,8 @@ import org.neo4j.kernel.api.LabelNotFoundKernelException;
 import org.neo4j.kernel.api.PropertyKeyNotFoundException;
 import org.neo4j.kernel.api.SchemaRuleNotFoundException;
 import org.neo4j.kernel.api.StatementContext;
+
+import static java.util.Arrays.asList;
 
 class IndexDefinitionImpl implements IndexDefinition
 {
@@ -59,7 +59,7 @@ class IndexDefinitionImpl implements IndexDefinition
     @Override
     public void drop()
     {
-        StatementContext context = ctxProvider.getCtxForWriting();
+        StatementContext context = ctxProvider.getStatementContext();
         try
         {
             context.dropIndexRule(

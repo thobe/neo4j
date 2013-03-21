@@ -146,19 +146,4 @@ public class Kernel extends LifecycleAdapter implements KernelAPI
         // done
         return result;
     }
-
-    @Override
-    public StatementContext newReadOnlyStatementContext()
-    {
-        // I/O
-        StatementContext result = new StoreStatementContext(
-                propertyIndexManager, persistenceManager, nodeManager,
-                neoStore, indexService, new IndexReaderFactory.NonCaching( indexService ) );
-        // + Cache
-        result = new CachingStatementContext( result, persistenceCache, schemaCache );
-        // + Read only access
-        result = new ReadOnlyStatementContext( result );
-
-        return result;
-    }
 }

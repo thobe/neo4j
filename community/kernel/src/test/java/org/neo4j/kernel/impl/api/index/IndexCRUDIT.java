@@ -19,17 +19,6 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.junit.Assert.assertThat;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-import static org.neo4j.helpers.collection.MapUtil.map;
-import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
-
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Map;
@@ -56,6 +45,17 @@ import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.junit.Assert.assertThat;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import static org.neo4j.helpers.collection.MapUtil.map;
+import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
+
 public class IndexCRUDIT
 {
     @Test
@@ -73,14 +73,24 @@ public class IndexCRUDIT
         Node node = createNode( map( indexProperty, value1, otherProperty, otherValue ), myLabel );
 
         // Then, for now, this should trigger two NodePropertyUpdates
-        long propertyKey1 = ctxProvider.getCtxForReading().getPropertyKeyId( indexProperty );
-        long[] labels = new long[] {ctxProvider.getCtxForReading().getLabelId( myLabel.name() )};
-        assertThat( writer.updates, equalTo( asSet(
-                NodePropertyUpdate.add( node.getId(), propertyKey1, value1, labels ) ) ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            long propertyKey1 = ctxProvider.getStatementContext().getPropertyKeyId( indexProperty );
+            long[] labels = new long[] {ctxProvider.getStatementContext().getLabelId( myLabel.name() )};
+            assertThat( writer.updates, equalTo( asSet(
+                    NodePropertyUpdate.add( node.getId(), propertyKey1, value1, labels ) ) ) );
 
-        // We get two updates because we both add a label and a property to be indexed
-        // in the same transaction, in the future, we should optimize this down to
-        // one NodePropertyUpdate.
+            // We get two updates because we both add a label and a property to be indexed
+            // in the same transaction, in the future, we should optimize this down to
+            // one NodePropertyUpdate.
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test
@@ -107,10 +117,12 @@ public class IndexCRUDIT
         tx.finish();
 
         // THEN
-        long propertyKey1 = ctxProvider.getCtxForReading().getPropertyKeyId( indexProperty );
-        long[] labels = new long[] {ctxProvider.getCtxForReading().getLabelId( myLabel.name() )};
+        tx = db.beginTx();
+        long propertyKey1 = ctxProvider.getStatementContext().getPropertyKeyId( indexProperty );
+        long[] labels = new long[] {ctxProvider.getStatementContext().getLabelId( myLabel.name() )};
         assertThat( writer.updates, equalTo( asSet(
                 NodePropertyUpdate.add( node.getId(), propertyKey1, value, labels ) ) ) );
+        tx.finish();
     }
 
     private GraphDatabaseAPI db;
@@ -141,7 +153,9 @@ public class IndexCRUDIT
         IndexDefinition index = db.schema().indexCreator( myLabel ).on( indexProperty ).create();
         tx.success();
         tx.finish();
+        tx = db.beginTx();
         db.schema().awaitIndexOnline( index, 10, TimeUnit.SECONDS );
+        tx.finish();
     }
 
     @Before
@@ -188,8 +202,9 @@ public class IndexCRUDIT
         {
             try
             {
-                updates.add( NodePropertyUpdate.add( nodeId, ctxProvider.getCtxForReading().getPropertyKeyId( propertyKey ),
-                        propertyValue, new long[] {ctxProvider.getCtxForReading().getLabelId( myLabel.name() )} ) );
+                updates.add( NodePropertyUpdate.add( nodeId, ctxProvider.getStatementContext()
+                                                                        .getPropertyKeyId( propertyKey ),
+                        propertyValue, new long[] {ctxProvider.getStatementContext().getLabelId( myLabel.name() )} ) );
             }
             catch ( PropertyKeyNotFoundException e )
             {

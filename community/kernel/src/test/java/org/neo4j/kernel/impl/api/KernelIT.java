@@ -19,10 +19,6 @@
  */
 package org.neo4j.kernel.impl.api;
 
-import static org.junit.Assert.*;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-
 import java.util.Set;
 
 import org.junit.After;
@@ -37,6 +33,12 @@ import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.StatementContext;
 import org.neo4j.kernel.api.TransactionContext;
 import org.neo4j.test.ImpermanentGraphDatabase;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 
 public class KernelIT
 {
@@ -82,7 +84,7 @@ public class KernelIT
         Transaction beansAPITx = db.beginTx();
 
         // 2: Get a hold of a KernelAPI statement context for the *current* transaction this way:
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
 
         // 3: Now you can interact through both the statement context and the kernel API to manipulate the
         //    same transaction.
@@ -126,7 +128,7 @@ public class KernelIT
     {
         // GIVEN
         Transaction tx = db.beginTx();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
 
         // WHEN
         Node node = db.createNode();
@@ -136,15 +138,17 @@ public class KernelIT
         tx.finish();
 
         // THEN
-        statement = statementContextProvider.getCtxForReading();
+        tx = db.beginTx();
+        statement = statementContextProvider.getStatementContext();
         assertFalse( statement.isLabelSetOnNode( labelId, node.getId() ) );
+        tx.failure();
     }
     
     @Test
     public void shouldNotBeAbleToCommitIfFailedTransactionContext() throws Exception
     {
         Transaction tx = db.beginTx();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
 
         // WHEN
         Node node = db.createNode();
@@ -156,15 +160,17 @@ public class KernelIT
         tx.finish();
 
         // THEN
-        statement = statementContextProvider.getCtxForReading();
+        tx = db.beginTx();
+        statement = statementContextProvider.getStatementContext();
         assertFalse( statement.isLabelSetOnNode( labelId, node.getId() ) );
+        tx.finish();
     }
 
     @Test
     public void transactionStateShouldRemovePreviouslyAddedLabel() throws Exception
     {
         Transaction tx = db.beginTx();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
 
         // WHEN
         Node node = db.createNode();
@@ -177,15 +183,17 @@ public class KernelIT
         tx.finish();
 
         // THEN
-        statement = statementContextProvider.getCtxForReading();
+        tx =  db.beginTx();
+        statement = statementContextProvider.getStatementContext();
         assertEquals( asSet( labelId1 ), asSet( statement.getLabelsForNode( node.getId() ) ) );
+        tx.finish();
     }
     
     @Test
     public void transactionStateShouldReflectRemovingAddedLabelImmediately() throws Exception
     {
         Transaction tx = db.beginTx();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
 
         // WHEN
         Node node = db.createNode();
@@ -208,7 +216,7 @@ public class KernelIT
     {
         // GIVEN
         Transaction tx = db.beginTx();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         Node node = db.createNode();
         long labelId1 = statement.getOrCreateLabelId( "labello1" );
         long labelId2 = statement.getOrCreateLabelId( "labello2" );
@@ -217,7 +225,7 @@ public class KernelIT
         tx.success();
         tx.finish();
         tx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting();
+        statement = statementContextProvider.getStatementContext();
 
         // WHEN
         statement.removeLabelFromNode( labelId2, node.getId() );
@@ -237,7 +245,7 @@ public class KernelIT
         // GIVEN
         Transaction tx = db.beginTx();
         Node node = db.createNode();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         long labelId = statement.getOrCreateLabelId( "mylabel" );
         statement.addLabelToNode( labelId, node.getId() );
         tx.success();
@@ -245,7 +253,7 @@ public class KernelIT
 
         // WHEN
         tx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting();
+        statement = statementContextProvider.getStatementContext();
         boolean added = statement.addLabelToNode( labelId, node.getId() );
 
         // THEN
@@ -258,14 +266,14 @@ public class KernelIT
         // GIVEN
         Transaction tx = db.beginTx();
         Node node = db.createNode();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         long labelId = statement.getOrCreateLabelId( "mylabel" );
         tx.success();
         tx.finish();
 
         // WHEN
         tx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting();
+        statement = statementContextProvider.getStatementContext();
         boolean added = statement.addLabelToNode( labelId, node.getId() );
 
         // THEN
@@ -278,7 +286,7 @@ public class KernelIT
         // GIVEN
         Transaction tx = db.beginTx();
         Node node = db.createNode();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         long labelId = statement.getOrCreateLabelId( "mylabel" );
         statement.addLabelToNode( labelId, node.getId() );
         tx.success();
@@ -286,7 +294,7 @@ public class KernelIT
 
         // WHEN
         tx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting();
+        statement = statementContextProvider.getStatementContext();
         boolean removed = statement.removeLabelFromNode( labelId, node.getId() );
 
         // THEN
@@ -299,14 +307,14 @@ public class KernelIT
         // GIVEN
         Transaction tx = db.beginTx();
         Node node = db.createNode();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         long labelId = statement.getOrCreateLabelId( "mylabel" );
         tx.success();
         tx.finish();
 
         // WHEN
         tx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting();
+        statement = statementContextProvider.getStatementContext();
         boolean removed = statement.removeLabelFromNode( labelId, node.getId() );
 
         // THEN
@@ -326,7 +334,7 @@ public class KernelIT
         // WHEN
         tx = db.beginTx();
         node.delete();
-        StatementContext statement = statementContextProvider.getCtxForWriting();
+        StatementContext statement = statementContextProvider.getStatementContext();
         long labelId = statement.getLabelId( label.name() );
         Set<Long> labels = asSet( statement.getLabelsForNode( node.getId() ) );
         boolean labelIsSet = statement.isLabelSetOnNode( labelId, node.getId() );

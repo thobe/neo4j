@@ -19,11 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static org.neo4j.helpers.collection.Iterables.filter;
-import static org.neo4j.helpers.collection.Iterables.map;
-import static java.lang.String.format;
-import static org.slf4j.impl.StaticLoggerBinder.getSingleton;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,6 +33,7 @@ import javax.transaction.NotSupportedException;
 import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
 
+import ch.qos.logback.classic.LoggerContext;
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
@@ -145,7 +141,10 @@ import org.neo4j.kernel.logging.LogbackService;
 import org.neo4j.kernel.logging.Logging;
 import org.neo4j.tooling.GlobalGraphOperations;
 
-import ch.qos.logback.classic.LoggerContext;
+import static java.lang.String.format;
+import static org.neo4j.helpers.collection.Iterables.filter;
+import static org.neo4j.helpers.collection.Iterables.map;
+import static org.slf4j.impl.StaticLoggerBinder.getSingleton;
 
 /**
  * Base implementation of GraphDatabaseService. Responsible for creating services, handling dependencies between them,
@@ -451,8 +450,8 @@ public abstract class InternalAbstractGraphDatabase
         // XXX: Circular dependency, temporary during transition to KernelAPI
         txManager.setKernel(kernelAPI);
 
-        statementContextProvider = life.add( new ThreadToStatementContextBridge( kernelAPI, txManager,
-                xaDataSourceManager ) );
+        statementContextProvider = life.add( new ThreadToStatementContextBridge( txManager
+        ) );
 
         nodeManager = guard != null ?
                 createGuardedNodeManager( readOnly, cacheProvider, nodeCache, relCache ) :
@@ -1464,7 +1463,7 @@ public abstract class InternalAbstractGraphDatabase
     public Iterable<Node> findNodesByLabelAndProperty( final Label myLabel, final String propertyName,
                                                        final Object value )
     {
-        StatementContext ctx = statementContextProvider.getCtxForReading();
+        StatementContext ctx = statementContextProvider.getStatementContext();
 
         long propertyId;
         long labelId;

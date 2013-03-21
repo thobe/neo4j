@@ -19,16 +19,6 @@
  */
 package org.neo4j.graphdb;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.Iterables.map;
-import static org.neo4j.helpers.collection.IteratorUtil.asEnumNameSet;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-import static org.neo4j.helpers.collection.IteratorUtil.count;
-
 import java.io.File;
 import java.util.Iterator;
 import java.util.Set;
@@ -46,6 +36,16 @@ import org.neo4j.test.ImpermanentDatabaseRule;
 import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.impl.EphemeralIdGenerator;
 import org.neo4j.tooling.GlobalGraphOperations;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.Iterables.map;
+import static org.neo4j.helpers.collection.IteratorUtil.asEnumNameSet;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import static org.neo4j.helpers.collection.IteratorUtil.count;
 
 public class LabelsAcceptanceTest
 {
@@ -79,7 +79,9 @@ public class LabelsAcceptanceTest
         }
 
         // Then
+        tx = beansAPI.beginTx();
         assertTrue( "Label should have been added to node", myNode.hasLabel( Labels.MY_LABEL ) );
+        tx.finish();
     }
 
     @Test
@@ -141,7 +143,9 @@ public class LabelsAcceptanceTest
         }
 
         // Then
+        tx = beansAPI.beginTx();
         assertTrue( "Label should have been added to node", myNode.hasLabel( Labels.MY_LABEL ) );
+        tx.finish();
         // TODO: When support for reading labels has been introduced, assert that MY_LABEL occurs only once
     }
 
@@ -189,7 +193,9 @@ public class LabelsAcceptanceTest
         }
 
         // Then
+        tx = beansAPI.beginTx();
         assertFalse( "Label should have been removed from node", myNode.hasLabel( label ) );
+        tx.finish();
     }
 
     @Test
@@ -212,7 +218,9 @@ public class LabelsAcceptanceTest
         }
 
         // THEN
+        tx = db.beginTx();
         assertEquals( asEnumNameSet( Labels.class ), asLabelNameSet( node.getLabels() ));
+        tx.finish();
     }
 
     @Test
@@ -237,7 +245,9 @@ public class LabelsAcceptanceTest
         }
 
         // THEN
+        tx = beansAPI.beginTx();
         assertFalse( myNode.hasLabel( label ) );
+        tx.finish();
     }
 
     @Test
@@ -262,7 +272,9 @@ public class LabelsAcceptanceTest
         }
 
         // THEN
+        tx = beansAPI.beginTx();
         assertFalse( myNode.hasLabel( label ) );
+        tx.finish();
     }
 
     @Test
@@ -313,10 +325,12 @@ public class LabelsAcceptanceTest
         }
 
         // WHEN
+        tx = beansAPI.beginTx();
         Set<String> labels = asSet( asStrings( node.getLabels() ) );
 
         // THEN
         assertEquals( "Node didn't have all labels", expected, labels );
+        tx.finish();
     }
     
     @Test
@@ -326,15 +340,25 @@ public class LabelsAcceptanceTest
         GraphDatabaseService beansAPI = dbRule.getGraphDatabaseService();
         Node node = createNode( beansAPI );
 
-        // WHEN
-        Iterable<Label> labels = node.getLabels();
+        Transaction tx = beansAPI.beginTx();
+        try
+        {
+            // WHEN
+            Iterable<Label> labels = node.getLabels();
 
-        // THEN
-        assertEquals( 0, count( labels ) );
+            // THEN
+            assertEquals( 0, count( labels ) );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test
-    public void getNodesWithLabelCommited() throws Exception
+    public void getNodesWithLabelCommitted() throws Exception
     {
         // Given
         GraphDatabaseService beansAPI = dbRule.getGraphDatabaseService();
@@ -342,16 +366,18 @@ public class LabelsAcceptanceTest
 
         // When
         Transaction tx = beansAPI.beginTx();
-        Node node = beansAPI.createNode( );
+        Node node = beansAPI.createNode();
         node.addLabel( Labels.MY_LABEL );
         tx.success();
         tx.finish();
 
         // THEN
+        tx = beansAPI.beginTx();
         Iterator<Node> labelIter = glops.getAllNodesWithLabel( Labels.MY_LABEL ).iterator();
         assertEquals( labelIter.next(), node );
         assertFalse( labelIter.hasNext() );
         assertFalse( glops.getAllNodesWithLabel( Labels.MY_OTHER_LABEL ).iterator().hasNext() );
+        tx.finish();
     }
     
     @Test

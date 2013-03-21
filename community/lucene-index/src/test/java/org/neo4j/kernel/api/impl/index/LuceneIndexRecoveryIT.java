@@ -19,10 +19,6 @@
  */
 package org.neo4j.kernel.api.impl.index;
 
-import static org.junit.Assert.assertEquals;
-import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -50,6 +46,10 @@ import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+
+import static org.junit.Assert.assertEquals;
+import static org.neo4j.graphdb.DynamicLabel.label;
+import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
 
 public class LuceneIndexRecoveryIT
 {
@@ -151,12 +151,23 @@ public class LuceneIndexRecoveryIT
         // When
         startDb( createLuceneIndexFactory() );
 
-        IndexDefinition indexDefinition = db.schema().getIndexes().iterator().next();
-        db.schema().awaitIndexOnline( indexDefinition, 2l, TimeUnit.SECONDS );
+        Transaction tx = db.beginTx();
+        try
+        {
+            IndexDefinition indexDefinition = db.schema().getIndexes().iterator().next();
+            db.schema().awaitIndexOnline( indexDefinition, 2l, TimeUnit.SECONDS );
 
-        // Then
-        assertEquals( 12, db.getNodeById( nodeId ).getProperty( NUM_BANANAS_KEY ) );
-        assertEquals( 1, doIndexLookup( myLabel, 12 ).size() );
+
+            // Then
+            assertEquals( 12, db.getNodeById( nodeId ).getProperty( NUM_BANANAS_KEY ) );
+            assertEquals( 1, doIndexLookup( myLabel, 12 ).size() );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     @Test
@@ -252,12 +263,24 @@ public class LuceneIndexRecoveryIT
 
     private void createIndex( Label label, boolean wait )
     {
-       Transaction tx = db.beginTx();
-       IndexDefinition definition = db.schema().indexCreator( label ).on( NUM_BANANAS_KEY ).create();
-       tx.success();
-       tx.finish();
-       if (wait)
-         db.schema().awaitIndexOnline( definition, 10, TimeUnit.SECONDS );
+        Transaction tx = db.beginTx();
+        IndexDefinition definition = db.schema().indexCreator( label ).on( NUM_BANANAS_KEY ).create();
+        tx.success();
+        tx.finish();
+        if ( wait )
+        {
+            tx = db.beginTx();
+            try
+            {
+                db.schema().awaitIndexOnline( definition, 10, TimeUnit.SECONDS );
+
+                tx.success();
+            }
+            finally
+            {
+                tx.finish();
+            }
+        }
     }
 
     private Set<Node> doIndexLookup( Label myLabel, Object value )

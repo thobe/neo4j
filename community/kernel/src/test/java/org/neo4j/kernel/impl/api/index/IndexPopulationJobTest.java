@@ -19,22 +19,6 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import static java.util.Arrays.asList;
-import static junit.framework.Assert.assertEquals;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.core.IsEqual.equalTo;
-import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.when;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
-import static org.neo4j.helpers.collection.MapUtil.map;
-import static org.neo4j.kernel.impl.util.TestLogger.LogCall.info;
-
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -72,6 +56,22 @@ import org.neo4j.test.DoubleLatch;
 import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.OtherThreadExecutor;
 import org.neo4j.test.OtherThreadExecutor.WorkerCommand;
+
+import static java.util.Arrays.asList;
+import static junit.framework.Assert.assertEquals;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.IsEqual.equalTo;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import static org.neo4j.helpers.collection.MapUtil.map;
+import static org.neo4j.kernel.impl.util.TestLogger.LogCall.info;
 
 public class IndexPopulationJobTest
 {
@@ -127,7 +127,18 @@ public class IndexPopulationJobTest
         long node2 = createNode( map( name, value2 ), FIRST );
         long node3 = createNode( map( name, value3 ), FIRST );
         long changeNode = node1;
-        long propertyKeyId = context.getPropertyKeyId( name );
+        long propertyKeyId;
+        Transaction tx = db.beginTx();
+        try
+        {
+            propertyKeyId = ctxProvider.getStatementContext().getPropertyKeyId( name );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
         NodeChangingWriter populator = new NodeChangingWriter( changeNode, propertyKeyId, value1, changedValue,
                 firstLabelId );
         IndexPopulationJob job = newIndexPopulationJob( FIRST, name, populator, new FlippableIndexProxy() );
@@ -153,19 +164,29 @@ public class IndexPopulationJobTest
         long node1 = createNode( map( name, value1 ), FIRST );
         long node2 = createNode( map( name, value2 ), FIRST );
         long node3 = createNode( map( name, value3 ), FIRST );
-        long propertyKeyId = context.getPropertyKeyId( name );
-        NodeDeletingWriter populator = new NodeDeletingWriter( node2, propertyKeyId, value2, firstLabelId );
-        IndexPopulationJob job = newIndexPopulationJob( FIRST, name, populator, new FlippableIndexProxy() );
-        populator.setJob( job );
+        Transaction tx = db.beginTx();
+        try
+        {
+            long propertyKeyId = ctxProvider.getStatementContext().getPropertyKeyId( name );
+            NodeDeletingWriter populator = new NodeDeletingWriter( node2, propertyKeyId, value2, firstLabelId );
+            IndexPopulationJob job = newIndexPopulationJob( FIRST, name, populator, new FlippableIndexProxy() );
+            populator.setJob( job );
 
-        // WHEN
-        job.run();
+            // WHEN
+            job.run();
 
-        // THEN
-        Map<Long, Object> expectedAdded = MapUtil.<Long,Object>genericMap( node1, value1, node2, value2, node3, value3 );
-        assertEquals( expectedAdded, populator.added ); 
-        Map<Long, Object> expectedRemoved = MapUtil.<Long,Object>genericMap( node2, value2 );
-        assertEquals( expectedRemoved, populator.removed ); 
+            // THEN
+            Map<Long, Object> expectedAdded = MapUtil.<Long,Object>genericMap( node1, value1, node2, value2, node3, value3 );
+            assertEquals( expectedAdded, populator.added );
+            Map<Long, Object> expectedRemoved = MapUtil.<Long,Object>genericMap( node2, value2 );
+            assertEquals( expectedRemoved, populator.removed );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
     
     @Test
@@ -373,7 +394,6 @@ public class IndexPopulationJobTest
     private final Label FIRST = DynamicLabel.label( "FIRST" ), SECOND = DynamicLabel.label( "SECOND" );
     private final String name = "name", age = "age";
     private ThreadToStatementContextBridge ctxProvider;
-    private StatementContext context;
     private IndexPopulator populator;
     private long firstLabelId, secondLabelId;
 
@@ -382,12 +402,11 @@ public class IndexPopulationJobTest
     {
         db = new ImpermanentGraphDatabase();
         ctxProvider = db.getDependencyResolver().resolveDependency( ThreadToStatementContextBridge.class );
-        context = ctxProvider.getCtxForReading();
-        populator = mock( IndexPopulator.class );
-        
         Transaction tx = db.beginTx();
-        firstLabelId = ctxProvider.getCtxForWriting().getOrCreateLabelId( FIRST.name() );
-        secondLabelId = ctxProvider.getCtxForWriting().getOrCreateLabelId( SECOND.name() );
+        populator = mock( IndexPopulator.class );
+
+        firstLabelId = ctxProvider.getStatementContext().getOrCreateLabelId( FIRST.name() );
+        secondLabelId = ctxProvider.getStatementContext().getOrCreateLabelId( SECOND.name() );
         tx.success();
         tx.finish();
     }
@@ -411,10 +430,22 @@ public class IndexPopulationJobTest
             FlippableIndexProxy flipper, IndexStoreView storeView, StringLogger logger )
             throws LabelNotFoundKernelException, PropertyKeyNotFoundException
     {
-        IndexRule indexRule = new IndexRule( 0, context.getLabelId( label.name() ), context.getPropertyKeyId( propertyKey ) );
-        IndexDescriptor descriptor = new IndexDescriptor( indexRule.getLabel(), indexRule.getPropertyKey() );
-        flipper.setFlipTarget( mock( IndexProxyFactory.class ) );
-        return new IndexPopulationJob( descriptor, populator, flipper, storeView, new SingleLoggingService( logger ) );
+        Transaction tx = db.beginTx();
+        try
+        {
+            StatementContext context = ctxProvider.getStatementContext();
+            IndexRule indexRule = new IndexRule( 0, context.getLabelId( label.name() ), context.getPropertyKeyId( propertyKey ) );
+            IndexDescriptor descriptor = new IndexDescriptor( indexRule.getLabel(), indexRule.getPropertyKey() );
+            flipper.setFlipTarget( mock( IndexProxyFactory.class ) );
+
+            tx.success();
+
+            return new IndexPopulationJob( descriptor, populator, flipper, storeView, new SingleLoggingService( logger ) );
+        }
+        finally
+        {
+            tx.finish();
+        }
     }
 
     private long createNode( Map<String, Object> properties, Label... labels )

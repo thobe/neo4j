@@ -31,7 +31,7 @@ class TransactionBoundPlanContext(graph: GraphDatabaseAPI) extends PlanContext {
   private val ctx: StatementContext = graph
     .getDependencyResolver
     .resolveDependency(classOf[ThreadToStatementContextBridge])
-    .getCtxForWriting
+    .getStatementContext
 
   def close(success: Boolean) {
     if (success)
