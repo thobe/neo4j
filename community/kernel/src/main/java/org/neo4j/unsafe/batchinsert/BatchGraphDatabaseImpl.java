@@ -254,6 +254,18 @@ class BatchGraphDatabaseImpl implements GraphDatabaseService
         {
             return PlaceboTransaction.NO_LOCK;
         }
+
+        @Override
+        public int changedNodeCount()
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public int changedRelationshipCount()
+        {
+            throw new UnsupportedOperationException();
+        }
     }
 
     private static class NodeBatchImpl implements Node

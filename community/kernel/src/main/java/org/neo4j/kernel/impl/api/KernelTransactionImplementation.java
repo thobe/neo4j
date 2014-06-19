@@ -208,6 +208,18 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
         return currentStatement;
     }
 
+    @Override
+    public int changedNodeCount()
+    {
+        return txState == null ? 0 : txState.changedNodeCount();
+    }
+
+    @Override
+    public int changedRelationshipCount()
+    {
+        return txState == null ? 0 : txState.changedRelationshipCount();
+    }
+
     public void releaseStatement( Statement statement )
     {
         assert currentStatement == statement;

@@ -38,6 +38,9 @@ public interface KernelTransaction
 {
     Statement acquireStatement();
 
+    int changedNodeCount();
+    int changedRelationshipCount();
+
     // Made unavailable for now, should be re-instated once the WriteTransaction/KernelTransaction structure is
     // sorted out.
 //    void prepare();

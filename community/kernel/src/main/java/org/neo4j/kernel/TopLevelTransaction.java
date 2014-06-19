@@ -157,4 +157,16 @@ public class TopLevelTransaction implements Transaction
     {
         return locker.sharedLock( stmtProvider, entity );
     }
+
+    @Override
+    public int changedNodeCount()
+    {
+        return stmtProvider.currentKernelTransaction().changedNodeCount();
+    }
+
+    @Override
+    public int changedRelationshipCount()
+    {
+        return stmtProvider.currentKernelTransaction().changedRelationshipCount();
+    }
 }

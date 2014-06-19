@@ -173,4 +173,7 @@ public interface Transaction extends AutoCloseable
      * transaction finishes.
      */
     Lock acquireReadLock( PropertyContainer entity );
+
+    int changedNodeCount();
+    int changedRelationshipCount();
 }

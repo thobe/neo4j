@@ -261,4 +261,8 @@ public interface TxState
     boolean constraintIndexDoUnRemove( IndexDescriptor index );
 
     Long indexCreatedForConstraint( UniquenessConstraint constraint );
+
+    int changedNodeCount();
+
+    int changedRelationshipCount();
 }

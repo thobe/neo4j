@@ -971,6 +971,54 @@ public final class TxStateImpl implements TxState
                 createdConstraintIndexesByConstraint.get( constraint );
     }
 
+    @Override
+    public int changedNodeCount()
+    {
+        return count( nodes, nodeStatesMap );
+    }
+
+    @Override
+    public int changedRelationshipCount()
+    {
+        return count( relationships, relationshipStatesMap );
+    }
+
+    private static int count( DiffSets<Long> existence, Map<Long, ?> statesMap )
+    {
+        if ( existence == null && statesMap == null )
+        {
+            return 0;
+        }
+        if ( statesMap == null )
+        {
+            return existence.size();
+        }
+        if ( existence == null )
+        {
+            return statesMap.size();
+        }
+        return existence.size() + statesMap.size() - overlap( existence.getAdded(), statesMap.keySet() );
+    }
+
+    private static int overlap( Set<?> small, Set<?> large )
+    {
+        if ( small.size() > large.size() )
+        {
+            Set<?> swap = small;
+            small = large;
+            large = swap;
+        }
+        int overlap = 0;
+        for ( Object key : small )
+        {
+            if ( large.contains( key ) )
+            {
+                overlap++;
+            }
+        }
+        return overlap;
+    }
+
     private Map<UniquenessConstraint, Long> createdConstraintIndexesByConstraint()
     {
         if ( !hasCreatedConstraintIndexesMap() )

@@ -325,4 +325,14 @@ public class DiffSets<T>
     {
         return format( "{+%s, -%s}", added( false ), removed( false ) );
     }
+
+    public int size()
+    {
+        return sizeOf( addedElements ) + sizeOf( removedElements );
+    }
+
+    private static int sizeOf( Set<?> elements )
+    {
+        return elements == null ? 0 : elements.size();
+    }
 }

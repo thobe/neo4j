@@ -81,4 +81,8 @@ public class ThreadToStatementContextBridge extends LifecycleAdapter implements 
         }
     }
 
+    public KernelTransaction currentKernelTransaction()
+    {
+        return persistenceManager.currentKernelTransactionForReading();
+    }
 }
