@@ -46,7 +46,22 @@ public interface Barrier
 
     class Control implements Barrier
     {
-        private final CountDownLatch reached = new CountDownLatch( 1 ), released = new CountDownLatch( 1 );
+        public static Control multiple( int workers )
+        {
+            return new Control( workers );
+        }
+
+        private final CountDownLatch reached, released = new CountDownLatch( 1 );
+
+        public Control()
+        {
+            this( 1 );
+        }
+
+        private Control( int workers )
+        {
+            this.reached = new CountDownLatch( workers );
+        }
 
         @Override
         public void reached()
@@ -97,6 +112,30 @@ public interface Barrier
         public void release()
         {
             released.countDown();
+        }
+
+        public Barrier inverted()
+        {
+            return new Barrier()
+            {
+                @Override
+                public void reached()
+                {
+                    try
+                    {
+                        await();
+                    }
+                    catch ( InterruptedException e )
+                    {
+                        throw new RuntimeException( e );
+                    }
+                    finally
+                    {
+
+                        release();
+                    }
+                }
+            };
         }
     }
 }

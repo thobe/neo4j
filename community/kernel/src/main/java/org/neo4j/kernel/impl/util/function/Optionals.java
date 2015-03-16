@@ -19,6 +19,11 @@
  */
 package org.neo4j.kernel.impl.util.function;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+
 import org.neo4j.function.Function;
 
 public class Optionals
@@ -109,5 +114,20 @@ public class Optionals
                 return "some( " + obj.toString() + " )";
             }
         };
+    }
+
+    public static <V> List<V> flatMapFutures( List<Future<Optional<V>>> futures )
+            throws ExecutionException, InterruptedException
+    {
+        List<V> result = new ArrayList<>();
+        for ( Future<Optional<V>> future : futures )
+        {
+            Optional<V> optional = future.get();
+            if ( optional.isPresent() )
+            {
+                result.add( optional.get() );
+            }
+        }
+        return result;
     }
 }

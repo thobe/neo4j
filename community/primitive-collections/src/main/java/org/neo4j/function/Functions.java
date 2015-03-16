@@ -89,7 +89,7 @@ public class Functions
     private static Function IDENTITY = new Function()
     {
         @Override
-        public Object apply( Object value ) throws Exception
+        public Object apply( Object value )
         {
             return value;
         }

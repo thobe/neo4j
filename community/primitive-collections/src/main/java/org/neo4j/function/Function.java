@@ -21,4 +21,6 @@ package org.neo4j.function;
 
 public interface Function<FROM, TO> extends RawFunction<FROM,TO,RuntimeException>
 {
+    @Override
+    TO apply( FROM from );
 }
