@@ -22,9 +22,10 @@ package org.neo4j.kernel.impl.api;
 import java.util.Iterator;
 
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.collection.primitive.PrimitiveLongIterator;
-import org.neo4j.cursor.Cursor;
-import org.neo4j.graphdb.Direction;
+import org.neo4j.kernel.api.EntityType;
+import org.neo4j.kernel.api.NodeCursor;
+import org.neo4j.kernel.api.PropertyCursor;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
@@ -39,10 +40,7 @@ import org.neo4j.kernel.impl.api.operations.EntityOperations;
 import org.neo4j.kernel.impl.api.operations.EntityReadOperations;
 import org.neo4j.kernel.impl.api.operations.EntityWriteOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
-import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.locking.Locks;
-import org.neo4j.kernel.impl.util.register.NeoRegister;
-import org.neo4j.register.Register;
 
 import static org.neo4j.kernel.api.StatementConstants.NO_SUCH_NODE;
 import static org.neo4j.kernel.impl.locking.ResourceTypes.INDEX_ENTRY;
@@ -73,32 +71,48 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations
         {
             UniquenessConstraint constraint = constraints.next();
             int propertyKeyId = constraint.propertyKeyId();
-            Property property = entityReadOperations.nodeGetProperty( state, nodeId, propertyKeyId );
-            if ( property.isDefined() )
+            try ( NodeCursor cursor = nodeCursor( state, nodeId ); PropertyCursor properties = cursor.nodeProperties() )
             {
-                validateNoExistingNodeWithLabelAndProperty( state, labelId, (DefinedProperty) property, nodeId );
+                if ( properties.propertyFind( propertyKeyId ) )
+                {
+                    validateNoExistingNodeWithLabelAndProperty( state, labelId, properties.property(), nodeId );
+                }
             }
         }
         return entityWriteOperations.nodeAddLabel( state, nodeId, labelId );
+    }
+
+    private NodeCursor nodeCursor( KernelStatement state, long nodeId ) throws EntityNotFoundException
+    {
+        NodeCursor cursor = entityReadOperations.nodesGetById( state, nodeId );
+        if ( !cursor.nodeNext() )
+        {
+            cursor.close();
+            throw new EntityNotFoundException( EntityType.NODE, nodeId );
+        }
+        return cursor;
     }
 
     @Override
     public Property nodeSetProperty( KernelStatement state, long nodeId, DefinedProperty property )
             throws EntityNotFoundException, ConstraintValidationKernelException
     {
-        PrimitiveIntIterator labelIds = entityReadOperations.nodeGetLabels( state, nodeId );
-        while ( labelIds.hasNext() )
+        try ( NodeCursor cursor = nodeCursor( state, nodeId ) )
         {
-            int labelId = labelIds.next();
-            int propertyKeyId = property.propertyKeyId();
-            Iterator<UniquenessConstraint> constraintIterator =
-                    schemaReadOperations.constraintsGetForLabelAndPropertyKey( state, labelId, propertyKeyId );
-            if ( constraintIterator.hasNext() )
+            PrimitiveIntIterator labelIds = cursor.nodeLabels();
+            while ( labelIds.hasNext() )
             {
-                validateNoExistingNodeWithLabelAndProperty( state, labelId, property, nodeId );
+                int labelId = labelIds.next();
+                int propertyKeyId = property.propertyKeyId();
+                Iterator<UniquenessConstraint> constraintIterator =
+                        schemaReadOperations.constraintsGetForLabelAndPropertyKey( state, labelId, propertyKeyId );
+                if ( constraintIterator.hasNext() )
+                {
+                    validateNoExistingNodeWithLabelAndProperty( state, labelId, property, nodeId );
+                }
             }
+            return entityWriteOperations.nodeSetProperty( state, nodeId, property );
         }
-        return entityWriteOperations.nodeSetProperty( state, nodeId, property );
     }
 
     private void validateNoExistingNodeWithLabelAndProperty( KernelStatement state, int labelId,
@@ -199,13 +213,19 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetForLabel( KernelStatement state, int labelId )
+    public NodeCursor nodesGetForLabel( KernelStatement state, int labelId )
     {
         return entityReadOperations.nodesGetForLabel( state, labelId );
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexLookup( KernelStatement state, IndexDescriptor index, Object value )
+    public NodeCursor nodesGetById( KernelStatement state, long nodeId )
+    {
+        return entityReadOperations.nodesGetById( state, nodeId );
+    }
+
+    @Override
+    public NodeCursor nodesGetFromIndexLookup( KernelStatement state, IndexDescriptor index, Object value )
             throws IndexNotFoundKernelException
     {
         return entityReadOperations.nodesGetFromIndexLookup( state, index, value );
@@ -253,169 +273,32 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations
     }
 
     @Override
-    public boolean nodeExists( KernelStatement state, long nodeId )
-    {
-        return entityReadOperations.nodeExists( state, nodeId );
-    }
-
-    @Override
-    public boolean relationshipExists( KernelStatement statement, long relId )
-    {
-        return entityReadOperations.relationshipExists( statement, relId );
-    }
-
-    @Override
-    public boolean nodeHasLabel( KernelStatement state, long nodeId, int labelId ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeHasLabel( state, nodeId, labelId );
-    }
-
-    @Override
-    public PrimitiveIntIterator nodeGetLabels( KernelStatement state, long nodeId ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetLabels( state, nodeId );
-    }
-
-    @Override
-    public Property nodeGetProperty( KernelStatement state, long nodeId, int propertyKeyId ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetProperty( state, nodeId, propertyKeyId );
-    }
-
-    @Override
-    public Property relationshipGetProperty( KernelStatement state, long relationshipId, int propertyKeyId ) throws
-            EntityNotFoundException
-    {
-        return entityReadOperations.relationshipGetProperty( state, relationshipId, propertyKeyId );
-    }
-
-    @Override
-    public Property graphGetProperty( KernelStatement state, int propertyKeyId )
-    {
-        return entityReadOperations.graphGetProperty( state, propertyKeyId );
-    }
-
-    @Override
-    public PrimitiveLongIterator nodeGetPropertyKeys( KernelStatement state, long nodeId ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetPropertyKeys( state, nodeId );
-    }
-
-    @Override
-    public Iterator<DefinedProperty> nodeGetAllProperties( KernelStatement state, long nodeId ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetAllProperties( state, nodeId );
-    }
-
-    @Override
-    public PrimitiveLongIterator relationshipGetPropertyKeys( KernelStatement state, long relationshipId ) throws
-            EntityNotFoundException
-    {
-        return entityReadOperations.relationshipGetPropertyKeys( state, relationshipId );
-    }
-
-    @Override
-    public Iterator<DefinedProperty> relationshipGetAllProperties( KernelStatement state, long relationshipId ) throws
-            EntityNotFoundException
-    {
-        return entityReadOperations.relationshipGetAllProperties( state, relationshipId );
-    }
-
-    @Override
-    public PrimitiveLongIterator graphGetPropertyKeys( KernelStatement state )
-    {
-        return entityReadOperations.graphGetPropertyKeys( state );
-    }
-
-    @Override
-    public Iterator<DefinedProperty> graphGetAllProperties( KernelStatement state )
-    {
-        return entityReadOperations.graphGetAllProperties( state );
-    }
-
-    @Override
-    public RelationshipIterator nodeGetRelationships( KernelStatement statement, long nodeId, Direction direction,
-                                                       int[] relTypes ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetRelationships( statement, nodeId, direction, relTypes );
-    }
-
-    @Override
-    public RelationshipIterator nodeGetRelationships( KernelStatement statement, long nodeId, Direction direction ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetRelationships( statement, nodeId, direction );
-    }
-
-    @Override
-    public int nodeGetDegree( KernelStatement statement, long nodeId, Direction direction, int relType )
-            throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetDegree( statement, nodeId, direction, relType );
-    }
-
-    @Override
-    public int nodeGetDegree( KernelStatement statement, long nodeId, Direction direction ) throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetDegree( statement, nodeId, direction );
-    }
-
-    @Override
-    public PrimitiveIntIterator nodeGetRelationshipTypes( KernelStatement statement, long nodeId )
-            throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetRelationshipTypes( statement, nodeId );
-    }
-
-    @Override
     public long nodeCreate( KernelStatement statement )
     {
         return entityWriteOperations.nodeCreate( statement );
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetAll( KernelStatement state )
+    public NodeCursor nodesGetAll( KernelStatement state )
     {
         return entityReadOperations.nodesGetAll( state );
     }
 
     @Override
-    public PrimitiveLongIterator relationshipsGetAll( KernelStatement state )
+    public RelationshipCursor relationshipsGetAll( KernelStatement state )
     {
         return entityReadOperations.relationshipsGetAll( state );
     }
 
     @Override
-    public <EXCEPTION extends Exception> void relationshipVisit( KernelStatement statement,
-            long relId, RelationshipVisitor<EXCEPTION> visitor )
-            throws EntityNotFoundException, EXCEPTION
+    public RelationshipCursor relationshipsGetById( KernelStatement state, long relationshipId )
     {
-        entityReadOperations.relationshipVisit( statement, relId, visitor );
+        return entityReadOperations.relationshipsGetById( state, relationshipId );
     }
 
     @Override
-    public Cursor expand( KernelStatement statement, Cursor inputCursor, NeoRegister.Node.In nodeId,
-                          Register.Object.In<int[]> types, Register.Object.In<Direction> expandDirection,
-                          NeoRegister.Relationship.Out relId, NeoRegister.RelType.Out relType,
-                          Register.Object.Out<Direction> direction,
-                          NeoRegister.Node.Out startNodeId, NeoRegister.Node.Out neighborNodeId )
+    public PropertyCursor graphProperties( KernelStatement state )
     {
-        return entityReadOperations.expand( statement, inputCursor, nodeId, types, expandDirection,
-                relId, relType, direction, startNodeId, neighborNodeId );
-    }
-
-    @Override
-    public Cursor nodeGetRelationships( KernelStatement statement, long nodeId, Direction direction,
-                                        RelationshipVisitor<? extends RuntimeException> visitor )
-            throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetRelationships( statement, nodeId, direction, visitor );
-    }
-
-    @Override
-    public Cursor nodeGetRelationships( KernelStatement statement, long nodeId, Direction direction, int[] types,
-                                        RelationshipVisitor<? extends RuntimeException> visitor )
-            throws EntityNotFoundException
-    {
-        return entityReadOperations.nodeGetRelationships( statement, nodeId, direction, types, visitor );
+        return entityReadOperations.graphProperties( state );
     }
 }

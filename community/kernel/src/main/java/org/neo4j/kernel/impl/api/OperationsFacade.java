@@ -22,15 +22,13 @@ package org.neo4j.kernel.impl.api;
 import java.util.Iterator;
 import java.util.Map;
 
-import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.collection.primitive.PrimitiveLongCollections;
-import org.neo4j.collection.primitive.PrimitiveLongIterator;
-import org.neo4j.cursor.Cursor;
-import org.neo4j.graphdb.Direction;
 import org.neo4j.helpers.Function;
 import org.neo4j.kernel.api.DataWriteOperations;
 import org.neo4j.kernel.api.LegacyIndexHits;
+import org.neo4j.kernel.api.NodeCursor;
+import org.neo4j.kernel.api.PropertyCursor;
 import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.SchemaWriteOperations;
 import org.neo4j.kernel.api.StatementConstants;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
@@ -65,11 +63,8 @@ import org.neo4j.kernel.impl.api.operations.LegacyIndexWriteOperations;
 import org.neo4j.kernel.impl.api.operations.LockOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaStateOperations;
-import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.core.Token;
 import org.neo4j.kernel.impl.locking.Locks;
-import org.neo4j.kernel.impl.util.register.NeoRegister;
-import org.neo4j.register.Register;
 
 public class OperationsFacade implements ReadOperations, DataWriteOperations, SchemaWriteOperations
 {
@@ -141,33 +136,46 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     // <DataRead>
 
     @Override
-    public PrimitiveLongIterator nodesGetAll()
+    public RelationshipCursor relationshipsGetById( long relationshipId )
+    {
+        statement.assertOpen();
+        return dataRead().relationshipsGetById( statement, relationshipId );
+    }
+
+    @Override
+    public PropertyCursor graphProperties()
+    {
+        statement.assertOpen();
+        return dataRead().graphProperties( statement );
+    }
+
+    @Override
+    public NodeCursor nodesGetAll()
     {
         statement.assertOpen();
         return dataRead().nodesGetAll( statement );
     }
 
     @Override
-    public PrimitiveLongIterator relationshipsGetAll()
-    {
-        statement.assertOpen();
-        return dataRead().relationshipsGetAll( statement );
-    }
-
-    @Override
-    public PrimitiveLongIterator nodesGetForLabel( int labelId )
+    public NodeCursor nodesGetForLabel( int labelId )
     {
         statement.assertOpen();
         if ( labelId == StatementConstants.NO_SUCH_LABEL )
         {
-            return PrimitiveLongCollections.emptyIterator();
+            return EntityCursors.NO_NODES;
         }
         return dataRead().nodesGetForLabel( statement, labelId );
     }
 
     @Override
-    public PrimitiveLongIterator nodesGetFromIndexLookup( IndexDescriptor index, Object value )
-            throws IndexNotFoundKernelException
+    public NodeCursor nodesGetById( long nodeId )
+    {
+        statement.assertOpen();
+        return dataRead().nodesGetById( statement, nodeId );
+    }
+
+    @Override
+    public NodeCursor nodesGetFromIndexLookup( IndexDescriptor index, Object value ) throws IndexNotFoundKernelException
     {
         statement.assertOpen();
         return dataRead().nodesGetFromIndexLookup( statement, index, value );
@@ -182,175 +190,10 @@ public class OperationsFacade implements ReadOperations, DataWriteOperations, Sc
     }
 
     @Override
-    public boolean nodeExists( long nodeId )
+    public RelationshipCursor relationshipsGetAll()
     {
         statement.assertOpen();
-        return dataRead().nodeExists( statement, nodeId );
-    }
-
-    @Override
-    public boolean relationshipExists( long relId )
-    {
-        statement.assertOpen();
-        return dataRead().relationshipExists( statement, relId );
-    }
-
-    @Override
-    public boolean nodeHasLabel( long nodeId, int labelId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return labelId != StatementConstants.NO_SUCH_LABEL && dataRead().nodeHasLabel( statement, nodeId, labelId );
-    }
-
-    @Override
-    public PrimitiveIntIterator nodeGetLabels( long nodeId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetLabels( statement, nodeId );
-    }
-
-    @Override
-    public Property nodeGetProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return Property.noNodeProperty( nodeId, propertyKeyId );
-        }
-        return dataRead().nodeGetProperty( statement, nodeId, propertyKeyId );
-    }
-
-    @Override
-    public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction, int[] relTypes )
-            throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetRelationships( statement, nodeId, direction, relTypes );
-    }
-
-    @Override
-    public RelationshipIterator nodeGetRelationships( long nodeId, Direction direction )
-            throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetRelationships( statement, nodeId, direction );
-    }
-
-    @Override
-    public int nodeGetDegree( long nodeId, Direction direction, int relType ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetDegree( statement, nodeId, direction, relType );
-    }
-
-    @Override
-    public int nodeGetDegree( long nodeId, Direction direction ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetDegree( statement, nodeId, direction );
-    }
-
-    @Override
-    public PrimitiveIntIterator nodeGetRelationshipTypes( long nodeId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetRelationshipTypes( statement, nodeId );
-    }
-
-    @Override
-    public Property relationshipGetProperty( long relationshipId, int propertyKeyId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return Property.noRelationshipProperty( relationshipId, propertyKeyId );
-        }
-        return dataRead().relationshipGetProperty( statement, relationshipId, propertyKeyId );
-    }
-
-    @Override
-    public Property graphGetProperty( int propertyKeyId )
-    {
-        statement.assertOpen();
-        if ( propertyKeyId == StatementConstants.NO_SUCH_PROPERTY_KEY )
-        {
-            return Property.noGraphProperty( propertyKeyId );
-        }
-        return dataRead().graphGetProperty( statement, propertyKeyId );
-    }
-
-    @Override
-    public PrimitiveLongIterator nodeGetAllPropertiesKeys( long nodeId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetPropertyKeys(statement, nodeId);
-    }
-
-    @Override
-    public Iterator<DefinedProperty> nodeGetAllProperties( long nodeId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetAllProperties( statement, nodeId );
-    }
-
-    @Override
-    public PrimitiveLongIterator relationshipGetAllPropertiesKeys( long nodeId ) throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().relationshipGetPropertyKeys(statement, nodeId);
-    }
-
-    @Override
-    public Iterator<DefinedProperty> relationshipGetAllProperties( long relationshipId )
-            throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().relationshipGetAllProperties( statement, relationshipId );
-    }
-
-    @Override
-    public Iterator<DefinedProperty> graphGetAllProperties()
-    {
-        statement.assertOpen();
-        return dataRead().graphGetAllProperties( statement );
-    }
-
-    @Override
-    public <EXCEPTION extends Exception> void relationshipVisit( long relId,
-            RelationshipVisitor<EXCEPTION> visitor ) throws EntityNotFoundException, EXCEPTION
-    {
-        statement.assertOpen();
-        dataRead().relationshipVisit( statement, relId, visitor );
-    }
-
-    @Override
-    public Cursor expand( Cursor inputCursor, NeoRegister.Node.In nodeId, Register.Object.In<int[]> types,
-                          Register.Object.In<Direction> expandDirection,
-                          NeoRegister.Relationship.Out relId, NeoRegister.RelType.Out relType,
-                          Register.Object.Out<Direction> direction,
-                          NeoRegister.Node.Out startNodeId, NeoRegister.Node.Out neighborNodeId )
-    {
-        statement.assertOpen();
-        return dataRead().expand( statement, inputCursor, nodeId, types, expandDirection,
-                relId, relType, direction, startNodeId, neighborNodeId );
-    }
-
-    @Override
-    public Cursor nodeGetRelationships( long nodeId, Direction direction,
-                                 RelationshipVisitor<? extends RuntimeException> visitor )
-            throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetRelationships( statement, nodeId, direction, visitor );
-    }
-
-    @Override
-    public Cursor nodeGetRelationships( long nodeId, Direction direction, int[] types,
-                                 RelationshipVisitor<? extends RuntimeException> visitor )
-            throws EntityNotFoundException
-    {
-        statement.assertOpen();
-        return dataRead().nodeGetRelationships( statement, nodeId, direction, types, visitor );
+        return dataRead().relationshipsGetAll( statement );
     }
 
     // </DataRead>

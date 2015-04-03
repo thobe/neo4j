@@ -19,30 +19,24 @@
  */
 package org.neo4j.kernel.impl.core;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.helpers.ThisShouldNotHappenError;
+import org.neo4j.kernel.api.PropertyCursor;
+import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.StatementTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyNotFoundException;
 import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
-import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.impl.api.RelationshipVisitor;
-import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 
-public class RelationshipProxy implements Relationship, RelationshipVisitor<RuntimeException>
+import static java.lang.String.format;
+
+public class RelationshipProxy extends PropertyContainerProxy implements Relationship
 {
     public interface RelationshipActions
     {
@@ -68,7 +62,7 @@ public class RelationshipProxy implements Relationship, RelationshipVisitor<Runt
     public RelationshipProxy( RelationshipActions actions, long id, long startNode, int type, long endNode )
     {
         this.actions = actions;
-        visit( id, type, startNode, endNode );
+        initialize( id, type, startNode, endNode );
     }
 
     public RelationshipProxy( RelationshipActions actions, long id )
@@ -79,8 +73,7 @@ public class RelationshipProxy implements Relationship, RelationshipVisitor<Runt
         this.loId = (int) id;
     }
 
-    @Override
-    public void visit( long id, int type, long startNode, long endNode ) throws RuntimeException
+    private void initialize( long id, int type, long startNode, long endNode ) throws RuntimeException
     {
         assert (0xFFFF_FFF0_0000_0000L & id) == 0 &&        // 36 bits
                (0xFFFF_FFF0_0000_0000L & startNode) == 0 && // 36 bits
@@ -98,13 +91,11 @@ public class RelationshipProxy implements Relationship, RelationshipVisitor<Runt
     {
         if ( (hiBits & 0xF000) != 0 )
         {
-            try ( Statement statement = actions.statement() )
+            try ( Statement statement = actions.statement();
+                  RelationshipCursor cursor = cursor( statement.readOperations() ) )
             {
-                statement.readOperations().relationshipVisit( getId(), this );
-            }
-            catch ( EntityNotFoundException e )
-            {
-                throw new NotFoundException( e );
+                initialize( cursor.relationshipId(), cursor.relationshipType(), cursor.relationshipStartNode(),
+                            cursor.relationshipEndNode() );
             }
         }
     }
@@ -212,92 +203,28 @@ public class RelationshipProxy implements Relationship, RelationshipVisitor<Runt
     }
 
     @Override
-    public Iterable<String> getPropertyKeys()
+    Statement statement()
     {
-        try ( Statement statement = actions.statement() )
+        return actions.statement();
+    }
+
+    private RelationshipCursor cursor( ReadOperations read )
+    {
+        RelationshipCursor cursor = read.relationshipsGetById( getId() );
+        if ( !cursor.relationshipNext() )
         {
-            List<String> keys = new ArrayList<>();
-            Iterator<DefinedProperty> properties = statement.readOperations().relationshipGetAllProperties( getId() );
-            while ( properties.hasNext() )
-            {
-                keys.add( statement.readOperations().propertyKeyGetName( properties.next().propertyKeyId() ) );
-            }
-            return keys;
+            cursor.close();
+            throw new NotFoundException( format( "Relationship %d not found", getId() ) );
         }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Relationship not found", e );
-        }
-        catch ( PropertyKeyIdNotFoundKernelException e )
-        {
-            throw new ThisShouldNotHappenError( "Jake",
-                    "Property key retrieved through kernel API should exist." );
-        }
+        return cursor;
     }
 
     @Override
-    public Object getProperty( String key )
+    PropertyCursor propertyCursor( ReadOperations read )
     {
-        if ( null == key )
+        try ( RelationshipCursor cursor = cursor( read ) )
         {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            try
-            {
-                int propertyId = statement.readOperations().propertyKeyGetForName( key );
-                if ( propertyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
-                {
-                    throw new NotFoundException( String.format( "No such property, '%s'.", key ) );
-                }
-                return statement.readOperations().relationshipGetProperty( getId(), propertyId ).value();
-            }
-            catch ( EntityNotFoundException | PropertyNotFoundException e )
-            {
-                throw new NotFoundException(
-                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
-            }
-        }
-    }
-
-    @Override
-    public Object getProperty( String key, Object defaultValue )
-    {
-        if ( null == key )
-        {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyId = statement.readOperations().propertyKeyGetForName( key );
-            return statement.readOperations().relationshipGetProperty( getId(), propertyId ).value( defaultValue );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new IllegalStateException( e );
-        }
-    }
-
-    @Override
-    public boolean hasProperty( String key )
-    {
-        if ( null == key )
-        {
-            return false;
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyId = statement.readOperations().propertyKeyGetForName( key );
-            return propertyId != KeyReadOperations.NO_SUCH_PROPERTY_KEY &&
-                   statement.readOperations().relationshipGetProperty( getId(), propertyId ).isDefined();
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new IllegalStateException( e );
+            return cursor.relationshipGetProperties();
         }
     }
 

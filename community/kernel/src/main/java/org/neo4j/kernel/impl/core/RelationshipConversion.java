@@ -21,34 +21,35 @@ package org.neo4j.kernel.impl.core;
 
 import java.util.NoSuchElementException;
 
-import org.neo4j.cursor.Cursor;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.ResourceIterator;
-import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.impl.api.RelationshipVisitor;
+import org.neo4j.kernel.api.RelationshipCursor;
 
-public class RelationshipConversion implements RelationshipVisitor<RuntimeException>, ResourceIterator<Relationship>
+public class RelationshipConversion implements ResourceIterator<Relationship>
 {
     private final NodeProxy.NodeActions actions;
-    Cursor cursor;
-    Statement statement;
+    private final RelationshipCursor cursor;
     private Relationship next;
 
-    public RelationshipConversion( NodeProxy.NodeActions actions )
+    public RelationshipConversion( NodeProxy.NodeActions actions, RelationshipCursor cursor )
     {
         this.actions = actions;
-    }
-
-    @Override
-    public void visit( long relId, int type, long startNode, long endNode ) throws RuntimeException
-    {
-        next = actions.newRelationshipProxy( relId, startNode, type, endNode );
+        this.cursor = cursor;
     }
 
     @Override
     public boolean hasNext()
     {
-        return next != null || cursor.next();
+        if ( next == null )
+        {
+            if ( !cursor.relationshipNext() )
+            {
+                return false;
+            }
+            next = actions.newRelationshipProxy( cursor.relationshipId(), cursor.relationshipStartNode(),
+                                                 cursor.relationshipType(), cursor.relationshipEndNode() );
+        }
+        return true;
     }
 
     @Override
@@ -73,6 +74,5 @@ public class RelationshipConversion implements RelationshipVisitor<RuntimeExcept
     public void close()
     {
         cursor.close();
-        statement.close();
     }
 }

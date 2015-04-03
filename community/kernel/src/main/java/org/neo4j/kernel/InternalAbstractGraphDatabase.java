@@ -25,9 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
-import org.neo4j.collection.primitive.PrimitiveLongCollections.PrimitiveLongBaseIterator;
-import org.neo4j.collection.primitive.PrimitiveLongIterator;
-import org.neo4j.function.primitive.FunctionFromPrimitiveLong;
+import org.neo4j.function.Predicate;
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -57,13 +55,16 @@ import org.neo4j.helpers.Service;
 import org.neo4j.helpers.Settings;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.helpers.collection.IteratorUtil;
-import org.neo4j.helpers.collection.ResourceClosingIterator;
+import org.neo4j.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.io.fs.FileSystemAbstraction;
 import org.neo4j.io.pagecache.PageCache;
 import org.neo4j.io.pagecache.monitoring.PageCacheMonitor;
 import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.api.KernelTransaction;
+import org.neo4j.kernel.api.NodeCursor;
+import org.neo4j.kernel.api.PropertyCursor;
 import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
@@ -168,7 +169,6 @@ import org.neo4j.tooling.GlobalGraphOperations;
 
 import static java.lang.String.format;
 
-import static org.neo4j.collection.primitive.PrimitiveLongCollections.map;
 import static org.neo4j.helpers.Settings.ANY;
 import static org.neo4j.helpers.Settings.STRING;
 import static org.neo4j.helpers.Settings.illegalValueMessage;
@@ -792,12 +792,6 @@ public abstract class InternalAbstractGraphDatabase
             }
 
             @Override
-            public Relationship newRelationshipProxy( long id )
-            {
-                return nodeManager.newRelationshipProxy( id );
-            }
-
-            @Override
             public Relationship newRelationshipProxy( long id, long startNodeId, int typeId, long endNodeId )
             {
                 return nodeManager.newRelationshipProxy( id, startNodeId, typeId, endNodeId );
@@ -1041,9 +1035,12 @@ public abstract class InternalAbstractGraphDatabase
         }
         try ( Statement statement = threadToTransactionBridge.get() )
         {
-            if ( !statement.readOperations().nodeExists( id ) )
+            try ( NodeCursor cursor = statement.readOperations().nodesGetById( id ) )
             {
-                throw new NotFoundException( format( "Node %d not found", id ) );
+                if ( !cursor.nodeNext() )
+                {
+                    throw new NotFoundException( format( "Node %d not found", id ) );
+                }
             }
 
             return nodeManager.newNodeProxyById( id );
@@ -1057,14 +1054,15 @@ public abstract class InternalAbstractGraphDatabase
         {
             throw new NotFoundException( format( "Relationship %d not found", id ) );
         }
-        try ( Statement statement = threadToTransactionBridge.get() )
+        try ( Statement statement = threadToTransactionBridge.get();
+              RelationshipCursor cursor = statement.readOperations().relationshipsGetById( id ) )
         {
-            if ( !statement.readOperations().relationshipExists( id ) )
+            if ( !cursor.relationshipNext() )
             {
                 throw new NotFoundException( format( "Relationship %d not found", id ) );
             }
-
-            return nodeManager.newRelationshipProxy( id );
+            return nodeManager.newRelationshipProxy( cursor.relationshipId(), cursor.relationshipStartNode(),
+                                                     cursor.relationshipType(), cursor.relationshipEndNode() );
         }
     }
 
@@ -1225,10 +1223,9 @@ public abstract class InternalAbstractGraphDatabase
     private ResourceIterator<Node> getNodesByLabelAndPropertyWithoutIndex( int propertyId, Object value,
                                                                            Statement statement, int labelId )
     {
-        return map2nodes(
-                new PropertyValueFilteringNodeIdIterator(
-                        statement.readOperations().nodesGetForLabel( labelId ),
-                        statement.readOperations(), propertyId, value ), statement );
+        NodeCursor cursor = statement.readOperations().nodesGetForLabel( labelId );
+        cursor.addFilter( new PropertyValueFilter( propertyId, value ) );
+        return map2nodes( cursor, statement );
     }
 
     private ResourceIterator<Node> allNodesWithLabel( final Label myLabel )
@@ -1242,27 +1239,26 @@ public abstract class InternalAbstractGraphDatabase
             return emptyIterator();
         }
 
-        final PrimitiveLongIterator nodeIds = statement.readOperations().nodesGetForLabel( labelId );
-        return ResourceClosingIterator.newResourceIterator( statement, map( new FunctionFromPrimitiveLong<Node>()
-        {
-            @Override
-            public Node apply( long nodeId )
-            {
-                return nodeManager.newNodeProxyById( nodeId );
-            }
-        }, nodeIds ) );
+        return map2nodes( statement.readOperations().nodesGetForLabel( labelId ), statement );
     }
 
-    private ResourceIterator<Node> map2nodes( PrimitiveLongIterator input, Statement statement )
+    private ResourceIterator<Node> map2nodes( final NodeCursor cursor, final Statement statement )
     {
-        return ResourceClosingIterator.newResourceIterator( statement, map( new FunctionFromPrimitiveLong<Node>()
+        return new PrefetchingResourceIterator<Node>()
         {
             @Override
-            public Node apply( long id )
+            protected Node fetchNextOrNull()
             {
-                return getNodeById( id );
+                return cursor.nodeNext() ? nodeManager.newNodeProxyById( cursor.nodeId() ) : null;
             }
-        }, input ) );
+
+            @Override
+            public void close()
+            {
+                cursor.close();
+                statement.close();
+            }
+        };
     }
 
     @Override
@@ -1297,41 +1293,24 @@ public abstract class InternalAbstractGraphDatabase
                 setting( "dbms.tracer", Settings.STRING, (String) null ); // 'null' default.
     }
 
-    private static class PropertyValueFilteringNodeIdIterator extends PrimitiveLongBaseIterator
+    private static class PropertyValueFilter implements Predicate<NodeCursor>
     {
-        private final PrimitiveLongIterator nodesWithLabel;
-        private final ReadOperations statement;
         private final int propertyKeyId;
         private final Object value;
 
-        PropertyValueFilteringNodeIdIterator( PrimitiveLongIterator nodesWithLabel, ReadOperations statement,
-                                              int propertyKeyId, Object value )
+        PropertyValueFilter( int propertyKeyId, Object value )
         {
-            this.nodesWithLabel = nodesWithLabel;
-            this.statement = statement;
             this.propertyKeyId = propertyKeyId;
             this.value = value;
         }
 
         @Override
-        protected boolean fetchNext()
+        public boolean test( NodeCursor cursor )
         {
-            for ( boolean hasNext = nodesWithLabel.hasNext(); hasNext; hasNext = nodesWithLabel.hasNext() )
+            try ( PropertyCursor properties = cursor.nodeProperties() )
             {
-                long nextValue = nodesWithLabel.next();
-                try
-                {
-                    if ( statement.nodeGetProperty( nextValue, propertyKeyId ).valueEquals( value ) )
-                    {
-                        return next( nextValue );
-                    }
-                }
-                catch ( EntityNotFoundException e )
-                {
-                    // continue to the next node
-                }
+                return properties.propertyFind( propertyKeyId ) && properties.propertyValueEquals( value );
             }
-            return false;
         }
     }
 

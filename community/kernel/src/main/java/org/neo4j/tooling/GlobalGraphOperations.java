@@ -19,8 +19,6 @@
  */
 package org.neo4j.tooling;
 
-import org.neo4j.collection.primitive.PrimitiveLongIterator;
-import org.neo4j.function.primitive.FunctionFromPrimitiveLong;
 import org.neo4j.graphdb.DependencyResolver;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
@@ -33,6 +31,8 @@ import org.neo4j.helpers.Function;
 import org.neo4j.helpers.collection.PrefetchingResourceIterator;
 import org.neo4j.helpers.collection.ResourceClosingIterator;
 import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.api.NodeCursor;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 import org.neo4j.kernel.impl.core.NodeManager;
@@ -40,7 +40,6 @@ import org.neo4j.kernel.impl.core.RelationshipTypeTokenHolder;
 import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.core.Token;
 
-import static org.neo4j.collection.primitive.PrimitiveLongCollections.map;
 import static org.neo4j.graphdb.DynamicLabel.label;
 import static org.neo4j.helpers.collection.Iterables.cast;
 import static org.neo4j.helpers.collection.Iterables.map;
@@ -89,21 +88,21 @@ public class GlobalGraphOperations
             public ResourceIterator<Node> iterator()
             {
                 final Statement statement = statementCtxSupplier.get();
-                final PrimitiveLongIterator ids = statement.readOperations().nodesGetAll();
+                final NodeCursor nodes = statement.readOperations().nodesGetAll();
                 return new PrefetchingResourceIterator<Node>()
                 {
                     @Override
                     public void close()
                     {
+                        nodes.close();
                         statement.close();
                     }
 
                     @Override
                     protected Node fetchNextOrNull()
                     {
-                        assert ids != null : "ids null";
                         assert nodeManager != null : "nodeManager null";
-                        return ids.hasNext() ? nodeManager.newNodeProxyById( ids.next() ) : null;
+                        return nodes.nodeNext() ? nodeManager.newNodeProxyById( nodes.nodeId() ) : null;
                     }
                 };
             }
@@ -124,19 +123,22 @@ public class GlobalGraphOperations
             public ResourceIterator<Relationship> iterator()
             {
                 final Statement statement = statementCtxSupplier.get();
-                final PrimitiveLongIterator ids = statement.readOperations().relationshipsGetAll();
+                final RelationshipCursor rels = statement.readOperations().relationshipsGetAll();
                 return new PrefetchingResourceIterator<Relationship>()
                 {
                     @Override
                     public void close()
                     {
+                        rels.close();
                         statement.close();
                     }
 
                     @Override
                     protected Relationship fetchNextOrNull()
                     {
-                        return ids.hasNext() ? nodeManager.newRelationshipProxy( ids.next() ) : null;
+                        return rels.relationshipNext() ? nodeManager.newRelationshipProxy(
+                                rels.relationshipId(), rels.relationshipStartNode(),
+                                rels.relationshipType(), rels.relationshipEndNode() ) : null;
                     }
                 };
             }
@@ -248,7 +250,7 @@ public class GlobalGraphOperations
 
     private ResourceIterator<Node> allNodesWithLabel( String label )
     {
-        Statement statement = statementCtxSupplier.get();
+        final Statement statement = statementCtxSupplier.get();
 
         int labelId = statement.readOperations().labelGetForName( label );
         if ( labelId == KeyReadOperations.NO_SUCH_LABEL )
@@ -257,15 +259,22 @@ public class GlobalGraphOperations
             return emptyIterator();
         }
 
-        final PrimitiveLongIterator nodeIds = statement.readOperations().nodesGetForLabel( labelId );
-        return ResourceClosingIterator.newResourceIterator( statement, map( new FunctionFromPrimitiveLong<Node>()
+        final NodeCursor nodes = statement.readOperations().nodesGetForLabel( labelId );
+        return new PrefetchingResourceIterator<Node>()
         {
             @Override
-            public Node apply( long nodeId )
+            protected Node fetchNextOrNull()
             {
-                return nodeManager.newNodeProxyById( nodeId );
+                return nodes.nodeNext() ? nodeManager.newNodeProxyById( nodes.nodeId() ) : null;
             }
-        }, nodeIds ) );
+
+            @Override
+            public void close()
+            {
+                nodes.close();
+                statement.close();
+            }
+        };
     }
 
     private void assertInUnterminatedTransaction()

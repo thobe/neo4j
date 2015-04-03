@@ -25,10 +25,8 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.neo4j.collection.primitive.PrimitiveIntIterator;
-import org.neo4j.function.primitive.FunctionFromPrimitiveInt;
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.DynamicRelationshipType;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -42,37 +40,37 @@ import org.neo4j.graphdb.StopEvaluator;
 import org.neo4j.graphdb.Traverser;
 import org.neo4j.graphdb.Traverser.Order;
 import org.neo4j.helpers.ThisShouldNotHappenError;
+import org.neo4j.kernel.api.NodeCursor;
+import org.neo4j.kernel.api.PropertyCursor;
 import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.RelationshipCursor;
+import org.neo4j.kernel.api.RelationshipSelector;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.StatementTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
 import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyNotFoundException;
 import org.neo4j.kernel.api.exceptions.RelationshipTypeIdNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.schema.ConstraintValidationKernelException;
 import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
 import org.neo4j.kernel.api.exceptions.schema.TooManyLabelsException;
-import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 import org.neo4j.kernel.impl.traversal.OldTraverserWrapper;
 
 import static java.lang.String.format;
 
-import static org.neo4j.collection.primitive.PrimitiveIntCollections.map;
 import static org.neo4j.graphdb.DynamicLabel.label;
-import static org.neo4j.helpers.collection.IteratorUtil.asList;
+import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 import static org.neo4j.kernel.api.StatementConstants.NO_SUCH_RELATIONSHIP_TYPE;
 import static org.neo4j.kernel.impl.core.TokenHolder.NO_ID;
 
-public class NodeProxy implements Node
+public class NodeProxy extends PropertyContainerProxy implements Node
 {
     public interface NodeActions
     {
         Statement statement();
-        
+
         GraphDatabaseService getGraphDatabase();
 
         void assertInUnterminatedTransaction();
@@ -80,8 +78,6 @@ public class NodeProxy implements Node
         void failTransaction();
 
         Relationship lazyRelationshipProxy( long id );
-
-        Relationship newRelationshipProxy( long id );
 
         Relationship newRelationshipProxy( long id, long startNodeId, int typeId, long endNodeId );
     }
@@ -140,24 +136,7 @@ public class NodeProxy implements Node
             @Override
             public ResourceIterator<Relationship> iterator()
             {
-                Statement statement = actions.statement();
-                try
-                {
-                    RelationshipConversion result = new RelationshipConversion( actions );
-                    result.cursor = statement.readOperations().nodeGetRelationships( nodeId, dir, result );
-                    result.statement = statement;
-                    return result;
-                }
-                catch ( EntityNotFoundException e )
-                {
-                    statement.close();
-                    throw new NotFoundException( format( "Node %d not found", nodeId ), e );
-                }
-                catch ( Throwable e )
-                {
-                    statement.close();
-                    throw e;
-                }
+                return relationshipIterator( dir, null );
             }
         };
     }
@@ -187,27 +166,25 @@ public class NodeProxy implements Node
             @Override
             public ResourceIterator<Relationship> iterator()
             {
-                Statement statement = actions.statement();
-                try
-                {
-                    RelationshipConversion result = new RelationshipConversion( actions );
-                    result.cursor = statement.readOperations().nodeGetRelationships(
-                            nodeId, direction, typeIds, result );
-                    result.statement = statement;
-                    return result;
-                }
-                catch ( EntityNotFoundException e )
-                {
-                    statement.close();
-                    throw new NotFoundException( format( "Node %d not found", nodeId ), e );
-                }
-                catch ( Throwable e )
-                {
-                    statement.close();
-                    throw e;
-                }
+                return relationshipIterator( direction, typeIds );
             }
         };
+    }
+
+    private ResourceIterator<Relationship> relationshipIterator( Direction direction, int[] typeIds )
+    {
+        Statement statement = actions.statement();
+        try ( NodeCursor cursor = cursor( statement.readOperations() ) )
+        {
+            return new RelationshipConversion( actions, typeIds == null ?
+                                                        cursor.nodeRelationships( direction ) :
+                                                        cursor.nodeRelationships( direction, typeIds ) );
+        }
+        catch ( Throwable e )
+        {
+            statement.close();
+            throw e;
+        }
     }
 
     @Override
@@ -334,91 +311,28 @@ public class NodeProxy implements Node
     }
 
     @Override
-    public Object getProperty( String key, Object defaultValue )
+    Statement statement()
     {
-        if ( null == key )
-        {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
+        return actions.statement();
+    }
 
-        try ( Statement statement = actions.statement() )
+    private NodeCursor cursor( ReadOperations read )
+    {
+        NodeCursor cursor = read.nodesGetById( nodeId );
+        if ( !cursor.nodeNext() )
         {
-            int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-            return statement.readOperations().nodeGetProperty( nodeId, propertyKeyId ).value( defaultValue );
+            cursor.close();
+            throw new NotFoundException( format( "Node %d not found", nodeId ) );
         }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( e );
-        }
+        return cursor;
     }
 
     @Override
-    public Iterable<String> getPropertyKeys()
+    PropertyCursor propertyCursor( ReadOperations read )
     {
-        try ( Statement statement = actions.statement() )
+        try ( NodeCursor cursor = cursor( read ) )
         {
-            List<String> keys = new ArrayList<>();
-            Iterator<DefinedProperty> properties = statement.readOperations().nodeGetAllProperties( getId() );
-            while ( properties.hasNext() )
-            {
-                keys.add( statement.readOperations().propertyKeyGetName( properties.next().propertyKeyId() ) );
-            }
-            return keys;
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found", e );
-        }
-        catch ( PropertyKeyIdNotFoundKernelException e )
-        {
-            throw new ThisShouldNotHappenError( "Jake",
-                    "Property key retrieved through kernel API should exist.", e );
-        }
-    }
-
-    @Override
-    public Object getProperty( String key ) throws NotFoundException
-    {
-        if ( null == key )
-        {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            try
-            {
-                int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-                if ( propertyKeyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
-                {
-                    throw new NotFoundException( format( "No such property, '%s'.", key ) );
-                }
-                return statement.readOperations().nodeGetProperty( nodeId, propertyKeyId ).value();
-            }
-            catch ( EntityNotFoundException | PropertyNotFoundException e )
-            {
-                throw new NotFoundException(
-                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
-            }
-        }
-    }
-
-    @Override
-    public boolean hasProperty( String key )
-    {
-        if ( null == key )
-        {
-            return false;
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-            return statement.readOperations().nodeGetProperty( nodeId, propertyKeyId ).isDefined();
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( e );
+            return cursor.nodeProperties();
         }
     }
 
@@ -476,7 +390,7 @@ public class NodeProxy implements Node
             int relationshipTypeId = statement.tokenWriteOperations().relationshipTypeGetOrCreateForName( type.name() );
             long relationshipId = statement.dataWriteOperations()
                                            .relationshipCreate( relationshipTypeId, nodeId, otherNode.getId() );
-            return actions.newRelationshipProxy( relationshipId, nodeId, relationshipTypeId, otherNode.getId()  );
+            return actions.newRelationshipProxy( relationshipId, nodeId, relationshipTypeId, otherNode.getId() );
         }
         catch ( IllegalTokenNameException | RelationshipTypeIdNotFoundKernelException e )
         {
@@ -500,8 +414,8 @@ public class NodeProxy implements Node
     {
         assertInUnterminatedTransaction();
         return OldTraverserWrapper.traverse( this,
-                traversalOrder, stopEvaluator,
-                returnableEvaluator, relationshipType, direction );
+                                             traversalOrder, stopEvaluator,
+                                             returnableEvaluator, relationshipType, direction );
     }
 
     @Override
@@ -512,9 +426,9 @@ public class NodeProxy implements Node
     {
         assertInUnterminatedTransaction();
         return OldTraverserWrapper.traverse( this,
-                traversalOrder, stopEvaluator,
-                returnableEvaluator, firstRelationshipType, firstDirection,
-                secondRelationshipType, secondDirection );
+                                             traversalOrder, stopEvaluator,
+                                             returnableEvaluator, firstRelationshipType, firstDirection,
+                                             secondRelationshipType, secondDirection );
     }
 
     @Override
@@ -524,8 +438,8 @@ public class NodeProxy implements Node
     {
         assertInUnterminatedTransaction();
         return OldTraverserWrapper.traverse( this,
-                traversalOrder, stopEvaluator,
-                returnableEvaluator, relationshipTypesAndDirections );
+                                             traversalOrder, stopEvaluator,
+                                             returnableEvaluator, relationshipTypesAndDirections );
     }
 
     @Override
@@ -536,7 +450,8 @@ public class NodeProxy implements Node
             try
             {
                 statement.dataWriteOperations().nodeAddLabel( getId(),
-                        statement.tokenWriteOperations().labelGetOrCreateForName( label.name() ) );
+                                                              statement.tokenWriteOperations()
+                                                                       .labelGetOrCreateForName( label.name() ) );
             }
             catch ( ConstraintValidationKernelException e )
             {
@@ -586,23 +501,18 @@ public class NodeProxy implements Node
     @Override
     public boolean hasLabel( Label label )
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
-            int labelId = statement.readOperations().labelGetForName( label.name() );
-            return statement.readOperations().nodeHasLabel( getId(), labelId );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            return false;
+            return cursor.nodeHasLabel( statement.readOperations().labelGetForName( label.name() ) );
         }
     }
 
     @Override
     public Iterable<Label> getLabels()
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
-            PrimitiveIntIterator labels = statement.readOperations().nodeGetLabels( getId() );
+            PrimitiveIntIterator labels = cursor.nodeLabels();
             List<Label> keys = new ArrayList<>();
             while ( labels.hasNext() )
             {
@@ -610,10 +520,6 @@ public class NodeProxy implements Node
                 keys.add( label( statement.readOperations().labelGetName( labelId ) ) );
             }
             return keys;
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found", e );
         }
         catch ( LabelNotFoundKernelException e )
         {
@@ -624,20 +530,16 @@ public class NodeProxy implements Node
     @Override
     public int getDegree()
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
-            return statement.readOperations().nodeGetDegree( nodeId, Direction.BOTH );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found.", e );
+            return cursor.nodeDegree( Direction.BOTH );
         }
     }
 
     @Override
     public int getDegree( RelationshipType type )
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
             ReadOperations ops = statement.readOperations();
             int typeId = ops.relationshipTypeGetForName( type.name() );
@@ -645,32 +547,23 @@ public class NodeProxy implements Node
             {   // This type doesn't even exist. Return 0
                 return 0;
             }
-            return ops.nodeGetDegree( nodeId, Direction.BOTH, typeId );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found.", e );
+            return cursor.nodeDegree( typeId, Direction.BOTH );
         }
     }
 
     @Override
     public int getDegree( Direction direction )
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
-            ReadOperations ops = statement.readOperations();
-            return ops.nodeGetDegree( nodeId, direction );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found.", e );
+            return cursor.nodeDegree( direction );
         }
     }
 
     @Override
     public int getDegree( RelationshipType type, Direction direction )
     {
-        try ( Statement statement = actions.statement() )
+        try ( Statement statement = actions.statement(); NodeCursor cursor = cursor( statement.readOperations() ) )
         {
             ReadOperations ops = statement.readOperations();
             int typeId = ops.relationshipTypeGetForName( type.name() );
@@ -678,25 +571,23 @@ public class NodeProxy implements Node
             {   // This type doesn't even exist. Return 0
                 return 0;
             }
-            return ops.nodeGetDegree( nodeId, direction, typeId );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found.", e );
+            return cursor.nodeDegree( typeId, direction );
         }
     }
 
     @Override
     public Iterable<RelationshipType> getRelationshipTypes()
     {
-        try ( Statement statement = actions.statement() )
+        try ( final Statement statement = actions.statement();
+              NodeCursor cursor = cursor( statement.readOperations() ) )
         {
-            ReadOperations ops = statement.readOperations();
-            return map2relTypes( statement, ops.nodeGetRelationshipTypes( nodeId ) );
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Node not found.", e );
+            RelationshipTypeNameExtractor types = new RelationshipTypeNameExtractor( statement.readOperations() );
+            try ( RelationshipCursor relationships = cursor.nodeRelationships(
+                    types ) )
+            {
+                relationships.relationshipNext();
+            }
+            return types;
         }
     }
 
@@ -704,9 +595,9 @@ public class NodeProxy implements Node
     {
         int[] ids = new int[types.length];
         int outIndex = 0;
-        for ( int i = 0; i < types.length; i++ )
+        for ( RelationshipType type : types )
         {
-            int id = statement.readOperations().relationshipTypeGetForName( types[i].name() );
+            int id = statement.readOperations().relationshipTypeGetForName( type.name() );
             if ( id != NO_SUCH_RELATIONSHIP_TYPE )
             {
                 ids[outIndex++] = id;
@@ -721,23 +612,35 @@ public class NodeProxy implements Node
         return ids;
     }
 
-    private Iterable<RelationshipType> map2relTypes( final Statement statement, PrimitiveIntIterator input )
+    private static class RelationshipTypeNameExtractor implements RelationshipSelector, Iterable<RelationshipType>
     {
-        return asList( map( new FunctionFromPrimitiveInt<RelationshipType>()
+        private final List<RelationshipType> types = new ArrayList<>();
+        private final ReadOperations readOps;
+
+        public RelationshipTypeNameExtractor( ReadOperations readOps )
         {
-            @Override
-            public RelationshipType apply( int id )
+            this.readOps = readOps;
+        }
+
+        @Override
+        public Direction selectRelationship( int type, int outgoing, int incoming, int loops )
+        {
+            try
             {
-                try
-                {
-                    return DynamicRelationshipType.withName( statement.readOperations().relationshipTypeGetName( id ) );
-                }
-                catch ( RelationshipTypeIdNotFoundKernelException e )
-                {
-                    throw new ThisShouldNotHappenError( "Jake",
-                            "Kernel API returned non-existent relationship type: " + id );
-                }
+                types.add( withName( readOps.relationshipTypeGetName( type ) ) );
             }
-        }, input ) );
+            catch ( RelationshipTypeIdNotFoundKernelException e )
+            {
+                throw new ThisShouldNotHappenError(
+                        "Jake", "Kernel API returned non-existent relationship type: " + type, e );
+            }
+            return null;
+        }
+
+        @Override
+        public Iterator<RelationshipType> iterator()
+        {
+            return types.iterator();
+        }
     }
 }

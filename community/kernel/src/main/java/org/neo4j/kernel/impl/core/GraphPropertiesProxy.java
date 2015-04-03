@@ -19,27 +19,18 @@
  */
 package org.neo4j.kernel.impl.core;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-
 import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.NotFoundException;
-import org.neo4j.helpers.ThisShouldNotHappenError;
+import org.neo4j.kernel.api.PropertyCursor;
+import org.neo4j.kernel.api.ReadOperations;
 import org.neo4j.kernel.api.Statement;
-import org.neo4j.kernel.api.StatementTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.PropertyNotFoundException;
 import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
-import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 
 import static java.lang.String.format;
 
-public class GraphPropertiesProxy implements GraphProperties
+public class GraphPropertiesProxy extends PropertyContainerProxy implements GraphProperties
 {
     private final GraphPropertiesActions actions;
 
@@ -65,62 +56,6 @@ public class GraphPropertiesProxy implements GraphProperties
         return actions.getGraphDatabaseService();
     }
 
-    @Override
-    public boolean hasProperty( String key )
-    {
-        if ( null == key )
-        {
-            return false;
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-            return statement.readOperations().graphGetProperty( propertyKeyId ).isDefined();
-        }
-    }
-
-    @Override
-    public Object getProperty( String key )
-    {
-        if ( null == key )
-        {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            try
-            {
-                int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-                if ( propertyKeyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
-                {
-                    throw new NotFoundException( format( "No such property, '%s'.", key ) );
-                }
-                return statement.readOperations().graphGetProperty( propertyKeyId ).value();
-            }
-            catch ( PropertyNotFoundException e )
-            {
-                throw new NotFoundException(
-                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
-            }
-        }
-    }
-
-    @Override
-    public Object getProperty( String key, Object defaultValue )
-    {
-        if ( null == key )
-        {
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-        }
-
-        try ( Statement statement = actions.statement() )
-        {
-            int propertyKeyId = statement.readOperations().propertyKeyGetForName( key );
-            return statement.readOperations().graphGetProperty( propertyKeyId ).value( defaultValue );
-        }
-    }
 
     @Override
     public void setProperty( String key, Object value )
@@ -167,25 +102,6 @@ public class GraphPropertiesProxy implements GraphProperties
         }
     }
 
-    @Override
-    public Iterable<String> getPropertyKeys()
-    {
-        try ( Statement statement = actions.statement() )
-        {
-            List<String> keys = new ArrayList<>();
-            Iterator<DefinedProperty> properties = statement.readOperations().graphGetAllProperties();
-            while ( properties.hasNext() )
-            {
-                keys.add( statement.readOperations().propertyKeyGetName( properties.next().propertyKeyId() ) );
-            }
-            return keys;
-        }
-        catch ( PropertyKeyIdNotFoundKernelException e )
-        {
-            throw new ThisShouldNotHappenError( "Jake",
-                    "Property key retrieved through kernel API should exist.", e );
-        }
-    }
 
     @Override
     public boolean equals( Object o )
@@ -200,5 +116,17 @@ public class GraphPropertiesProxy implements GraphProperties
     public int hashCode()
     {
         return actions.getGraphDatabaseService().hashCode();
+    }
+
+    @Override
+    Statement statement()
+    {
+        return actions.statement();
+    }
+
+    @Override
+    PropertyCursor propertyCursor( ReadOperations read )
+    {
+        return read.graphProperties();
     }
 }

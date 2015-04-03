@@ -112,7 +112,8 @@ public class LookupFilter
         @Override
         Property nodeProperty( long nodeId, int propertyKeyId ) throws EntityNotFoundException
         {
-            return readOperations.nodeGetProperty( state, nodeId, propertyKeyId );
+//            return readOperations.nodeGetProperty( state, nodeId, propertyKeyId );
+            throw new UnsupportedOperationException( "not implemented" );
         }
     }
 

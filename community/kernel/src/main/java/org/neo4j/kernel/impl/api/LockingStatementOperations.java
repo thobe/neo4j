@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.api;
 import java.util.Iterator;
 
 import org.neo4j.helpers.Function;
+import org.neo4j.kernel.api.RelationshipCursor;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
@@ -246,21 +247,15 @@ public class LockingStatementOperations implements
     @Override
     public void relationshipDelete( final KernelStatement state, long relationshipId ) throws EntityNotFoundException
     {
-        try
+        try ( RelationshipCursor cursor = entityReadDelegate.relationshipsGetById( state, relationshipId ) )
         {
-            entityReadDelegate.relationshipVisit( state, relationshipId, new RelationshipVisitor<RuntimeException>()
+            if ( !cursor.relationshipNext() )
             {
-                @Override
-                public void visit( long relId, int type, long startNode, long endNode )
-                {
-                    state.locks().acquireExclusive( ResourceTypes.NODE, startNode );
-                    state.locks().acquireExclusive( ResourceTypes.NODE, endNode );
-                }
-            });
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new IllegalStateException( "Unable to delete relationship[" + relationshipId+ "] since it is already deleted." );
+                throw new IllegalStateException(
+                        "Unable to delete relationship[" + relationshipId + "] since it is already deleted." );
+            }
+            state.locks().acquireExclusive( ResourceTypes.NODE, cursor.relationshipStartNode() );
+            state.locks().acquireExclusive( ResourceTypes.NODE, cursor.relationshipEndNode() );
         }
         state.locks().acquireExclusive( ResourceTypes.RELATIONSHIP, relationshipId );
         entityWriteDelegate.relationshipDelete( state, relationshipId );
