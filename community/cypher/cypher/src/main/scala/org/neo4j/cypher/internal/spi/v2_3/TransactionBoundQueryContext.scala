@@ -21,19 +21,17 @@ package org.neo4j.cypher.internal.spi.v2_3
 
 import org.neo4j.collection.primitive.PrimitiveLongIterator
 import org.neo4j.cypher.internal.compiler.v2_3.commands.StringSeekRange
-import org.neo4j.cypher.internal.compiler.v2_3.helpers.{BeansAPIRelationshipIterator, JavaConversionSupport}
 import org.neo4j.cypher.internal.compiler.v2_3.helpers.JavaConversionSupport._
+import org.neo4j.cypher.internal.compiler.v2_3.helpers.{BeansAPIRelationshipIterator, JavaConversionSupport}
 import org.neo4j.cypher.internal.compiler.v2_3.planner.logical.plans.LowerBounded
 import org.neo4j.cypher.internal.compiler.v2_3.spi._
 import org.neo4j.cypher.internal.compiler.v2_3.{EntityNotFoundException, FailedIndexException}
 import org.neo4j.graphdb.DynamicRelationshipType._
 import org.neo4j.graphdb._
 import org.neo4j.graphdb.factory.GraphDatabaseSettings
-import org.neo4j.helpers.collection.IteratorUtil
 import org.neo4j.kernel.GraphDatabaseAPI
 import org.neo4j.kernel.api._
-import org.neo4j.kernel.api.properties._
-import org.neo4j.kernel.api.constraints.UniquenessConstraint
+import org.neo4j.kernel.api.constraints.{MandatoryPropertyConstraint, UniquenessConstraint}
 import org.neo4j.kernel.api.exceptions.schema.{AlreadyConstrainedException, AlreadyIndexedException}
 import org.neo4j.kernel.api.index.{IndexDescriptor, InternalIndexState}
 import org.neo4j.kernel.configuration.Config
@@ -310,22 +308,24 @@ final class TransactionBoundQueryContext(graph: GraphDatabaseAPI,
     statement.schemaWriteOperations().indexDrop(new IndexDescriptor(labelId, propertyKeyId))
 
   def createUniqueConstraint(labelId: Int, propertyKeyId: Int): IdempotentResult[UniquenessConstraint] = try {
-    IdempotentResult(statement.schemaWriteOperations().uniquenessConstraintCreate(labelId, propertyKeyId))
+    IdempotentResult(statement.schemaWriteOperations().uniquePropertyConstraintCreate(labelId, propertyKeyId))
   } catch {
-    case _: AlreadyConstrainedException =>
-      val readOperations: ReadOperations = statement.readOperations()
-      val uniquenessConstraints = readOperations.constraintsGetForLabelAndPropertyKey(labelId, propertyKeyId)
-      IdempotentResult(IteratorUtil.single(uniquenessConstraints), wasCreated = false)
+    case existing: AlreadyConstrainedException =>
+      IdempotentResult(existing.constraint().asInstanceOf[UniquenessConstraint], wasCreated = false)
   }
 
   def dropUniqueConstraint(labelId: Int, propertyKeyId: Int) =
     statement.schemaWriteOperations().constraintDrop(new UniquenessConstraint(labelId, propertyKeyId))
 
-  //TODO implement
-  def createMandatoryConstraint(labelId: Int, propertyKeyId: Int): IdempotentResult[UniquenessConstraint] = ???
+  def createMandatoryConstraint(labelId: Int, propertyKeyId: Int): IdempotentResult[MandatoryPropertyConstraint] = try {
+    IdempotentResult(statement.schemaWriteOperations().mandatoryPropertyConstraintCreate(labelId, propertyKeyId))
+  } catch {
+    case existing: AlreadyConstrainedException =>
+      IdempotentResult(existing.constraint().asInstanceOf[MandatoryPropertyConstraint], wasCreated = false)
+  }
 
-  //TODO implement
-  def dropMandatoryConstraint(labelId: Int, propertyKeyId: Int) = ???
+  def dropMandatoryConstraint(labelId: Int, propertyKeyId: Int) =
+    statement.schemaWriteOperations().constraintDrop(new MandatoryPropertyConstraint(labelId, propertyKeyId))
 
   override def hasLocalFileAccess: Boolean = graph match {
     case db: GraphDatabaseAPI => db.getDependencyResolver.resolveDependency(classOf[Config]).get(GraphDatabaseSettings.allow_file_urls)
