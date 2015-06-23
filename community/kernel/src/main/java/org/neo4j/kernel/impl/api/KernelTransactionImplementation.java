@@ -32,6 +32,7 @@ import org.neo4j.helpers.ThisShouldNotHappenError;
 import org.neo4j.kernel.api.KernelTransaction;
 import org.neo4j.kernel.api.Statement;
 import org.neo4j.kernel.api.constraints.MandatoryPropertyConstraint;
+import org.neo4j.kernel.api.constraints.PropertyConstraint;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
@@ -71,6 +72,7 @@ import org.neo4j.kernel.impl.transaction.tracing.TransactionEvent;
 import org.neo4j.kernel.impl.transaction.tracing.TransactionTracer;
 import org.neo4j.kernel.impl.util.collection.ArrayCollection;
 
+import static org.neo4j.helpers.collection.IteratorUtil.loop;
 import static org.neo4j.kernel.api.ReadOperations.ANY_LABEL;
 import static org.neo4j.kernel.api.ReadOperations.ANY_RELATIONSHIP_TYPE;
 import static org.neo4j.kernel.impl.api.TransactionApplicationMode.INTERNAL;
@@ -371,9 +373,23 @@ public class KernelTransactionImplementation implements KernelTransaction, TxSta
     {
         if ( hasTxStateWithChanges() )
         {
-            txState().accept( txStateToRecordStateVisitor );
+            txState().accept( txStateVisitor() );
             txStateToRecordStateVisitor.done();
         }
+    }
+
+    private TxStateVisitor txStateVisitor()
+    {
+        TxStateVisitor visitor = txStateToRecordStateVisitor;
+        for ( PropertyConstraint constraint : loop( storeLayer.constraintsGetAll() ) )
+        {
+            if ( constraint instanceof MandatoryPropertyConstraint )
+            {
+                visitor = new MandatoryPropertyEnforcer( visitor, storeLayer, txState );
+                break;
+            }
+        }
+        return visitor;
     }
 
     private void assertTransactionOpen()

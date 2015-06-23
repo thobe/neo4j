@@ -662,7 +662,8 @@ public class StateHandlingStatementOperations implements
     {
         if ( state.hasTxStateWithChanges() )
         {
-            ReadableDiffSets<Long> labelPropertyChangesForPrefix = state.txState().indexUpdatesForPrefix( index, prefix );
+            ReadableDiffSets<Long> labelPropertyChangesForPrefix = state.txState().indexUpdatesForPrefix( index,
+                    prefix );
             ReadableDiffSets<Long> nodes = state.txState().addedAndRemovedNodes();
 
             // Apply to actual index lookup
@@ -806,6 +807,13 @@ public class StateHandlingStatementOperations implements
         }
 
         return storeLayer.nodeGetProperty( state.getStoreStatement(), nodeId, propertyKeyId );
+    }
+
+    public static Property nodeGetProperty(
+            StoreReadLayer storeLayer, StoreStatement statement, ReadableTxState txState,
+            long nodeId, int propertyKeyId )
+    {
+        throw new UnsupportedOperationException( "not implemented" );
     }
 
     @Override
