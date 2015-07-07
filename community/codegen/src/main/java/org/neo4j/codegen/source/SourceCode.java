@@ -78,7 +78,8 @@ public enum SourceCode implements CodeGeneratorOption
             return "PRINT_SOURCE";
         }
     };
-    static final CodeGeneratorOption USE_JDK_JAVA_COMPILER = JdkCompiler.FACTORY;
+    public static final CodeGeneratorOption USE_JDK_JAVA_COMPILER = JdkCompiler.FACTORY;
+    public static final CodeGeneratorOption USE_JANINO_JAVA_COMPILER = JaninoCompiler.FACTORY;
     public static final CodeGeneratorOption PRINT_WARNINGS = printWarningsTo( System.err );
 
     private static CodeGeneratorOption printWarningsTo( PrintStream err )
