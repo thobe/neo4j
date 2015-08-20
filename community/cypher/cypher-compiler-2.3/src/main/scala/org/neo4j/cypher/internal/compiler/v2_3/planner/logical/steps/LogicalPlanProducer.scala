@@ -28,7 +28,7 @@ import org.neo4j.cypher.internal.compiler.v2_3.planner.logical.LogicalPlanningCo
 import org.neo4j.cypher.internal.compiler.v2_3.planner.logical.Metrics.CardinalityModel
 import org.neo4j.cypher.internal.compiler.v2_3.planner.logical.plans.{Limit => LimitPlan, Skip => SkipPlan, _}
 import org.neo4j.cypher.internal.compiler.v2_3.symbols._
-import org.neo4j.cypher.internal.compiler.v2_3.{InternalException, ast}
+import org.neo4j.cypher.internal.compiler.v2_3.{symbols, InternalException, ast}
 import org.neo4j.graphdb.Direction
 
 case class LogicalPlanProducer(cardinalityModel: CardinalityModel) extends CollectionSupport {
@@ -300,6 +300,15 @@ case class LogicalPlanProducer(cardinalityModel: CardinalityModel) extends Colle
     planArgumentRow(patternNodes, patternRels, otherIds)
   }
 
+  def planArgumentRowFrom(plan: LogicalPlan)(implicit context: LogicalPlanningContext): LogicalPlan = {
+    val types: Map[String, CypherType] = plan.availableSymbols.map {
+      case n if context.semanticTable.isNode(n.name) => n.name -> symbols.CTNode
+      case r if context.semanticTable.isRelationship(r.name) => r.name -> symbols.CTRelationship
+      case v => v.name -> symbols.CTAny
+    }.toMap
+    Argument(plan.availableSymbols)(plan.solved)(types)
+  }
+
   def planArgumentRow(patternNodes: Set[IdName], patternRels: Set[PatternRelationship] = Set.empty, other: Set[IdName] = Set.empty)
                      (implicit context: LogicalPlanningContext): LogicalPlan = {
     val relIds = patternRels.map(_.name)
@@ -404,6 +413,12 @@ case class LogicalPlanProducer(cardinalityModel: CardinalityModel) extends Colle
     }
 
     Aggregation(left, returnAll.toMap, Map.empty)(left.solved)
+  }
+
+  def planTriadic(left: LogicalPlan, sourceId: IdName, seenId: IdName, targetId: IdName, right: LogicalPlan, predicate: Expression)
+                         (implicit context: LogicalPlanningContext): LogicalPlan = {
+    val solved = (left.solved ++ right.solved).updateTailOrSelf(_.updateGraph(_.addPredicates(predicate)))
+    Triadic(left, sourceId, seenId, targetId, right)(solved)
   }
 
   def planTriadicBuild(left: LogicalPlan, source: IdName, seen: IdName)(implicit context: LogicalPlanningContext): LogicalPlan =
