@@ -511,14 +511,25 @@ class WhereAcceptanceTest extends ExecutionEngineFunSuite with NewPlannerTestSup
     }
     graph.createIndex("Label", "prop")
 
-    val query = "MATCH (n:Label) WHERE n.prop >=5 AND n.prop < 10 RETURN n.prop AS prop"
+    val query1 = "MATCH (n:Label) WHERE n.prop >=5 AND n.prop < 10 RETURN n.prop AS prop"
+    val query2 = "MATCH (n:Label) WHERE 5 <= n.prop < 10 RETURN n.prop AS prop"
 
-    // When
-    val result = executeWithAllPlanners(query)
+    {
+      // When
+      val result = executeWithAllPlanners(query1)
 
-    // Then
-    result.columnAs[Number]("prop").asMultiSet should equal(MultiSet(5, 5.0, 6.1))
-    result.executionPlanDescription().toString should include("NodeIndexSeekByRange")
+      // Then
+      result.columnAs[Number]("prop").asMultiSet should equal(MultiSet(5, 5.0, 6.1))
+      result.executionPlanDescription().toString should include("NodeIndexSeekByRange")
+    }
+    {
+      // When
+      val result = executeWithAllPlanners(query2)
+
+      // Then
+      result.columnAs[Number]("prop").asMultiSet should equal(MultiSet(5, 5.0, 6.1))
+      result.executionPlanDescription().toString should include("NodeIndexSeekByRange")
+    }
   }
 
   test("should be able to plan index seek using multiple non-overlapping numerical ranges") {
