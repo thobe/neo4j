@@ -56,8 +56,10 @@ import org.neo4j.kernel.impl.api.operations.EntityReadOperations;
 import org.neo4j.kernel.impl.api.operations.EntityWriteOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
 import org.neo4j.kernel.impl.constraints.ConstraintSemantics;
 import org.neo4j.kernel.impl.locking.Locks;
+import org.neo4j.storageengine.api.Direction;
 import org.neo4j.storageengine.api.LabelItem;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
@@ -600,5 +602,11 @@ public class ConstraintEnforcingEntityOperations implements EntityOperations, Sc
     public boolean nodeExists( KernelStatement statement, long id )
     {
         return entityReadOperations.nodeExists( statement, id );
+    }
+
+    @Override
+    public int nodeRelationships( KernelStatement statement, RelationshipCursor cursor, long nodeId, Direction direction, int type )
+    {
+        return entityReadOperations.nodeRelationships( statement, cursor, nodeId, direction, type );
     }
 }

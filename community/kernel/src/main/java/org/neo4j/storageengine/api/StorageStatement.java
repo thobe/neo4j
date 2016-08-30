@@ -23,6 +23,7 @@ import org.neo4j.collection.primitive.PrimitiveLongIterator;
 import org.neo4j.cursor.Cursor;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
 import org.neo4j.storageengine.api.schema.IndexReader;
 import org.neo4j.storageengine.api.schema.LabelScanReader;
 
@@ -155,4 +156,6 @@ public interface StorageStatement extends AutoCloseable
      * @throws IndexNotFoundKernelException if no such index exists.
      */
     IndexReader getFreshIndexReader( IndexDescriptor index ) throws IndexNotFoundKernelException;
+
+    int initializeRelationshipCursor( RelationshipCursor cursor, long nodeId, Direction direction, int type );
 }

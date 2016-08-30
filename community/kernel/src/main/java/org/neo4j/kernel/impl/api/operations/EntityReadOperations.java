@@ -28,6 +28,8 @@ import org.neo4j.kernel.api.exceptions.schema.IndexBrokenKernelException;
 import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.impl.api.KernelStatement;
 import org.neo4j.kernel.impl.api.RelationshipVisitor;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
+import org.neo4j.storageengine.api.Direction;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 
@@ -190,4 +192,6 @@ public interface EntityReadOperations
     long relationshipsGetCount( KernelStatement statement );
 
     boolean nodeExists( KernelStatement statement, long id );
+
+    int nodeRelationships( KernelStatement statement, RelationshipCursor cursor, long nodeId, Direction direction, int type );
 }

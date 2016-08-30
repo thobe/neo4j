@@ -46,6 +46,7 @@ import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.proc.ProcedureSignature;
 import org.neo4j.kernel.impl.api.RelationshipVisitor;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.register.Register.DoubleLongRegister;
 import org.neo4j.storageengine.api.NodeItem;
@@ -255,6 +256,9 @@ public interface ReadOperations
     //===========================================
     //== CURSOR ACCESS OPERATIONS ===============
     //===========================================
+
+    // TODO: the API as stated here limits the use to a single type, that might not be desirable
+    int nodeRelationships( RelationshipCursor cursor, long nodeId, Direction direction, int type ) throws EntityNotFoundException;
 
     Cursor<NodeItem> nodeCursor( long nodeId );
 

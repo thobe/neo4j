@@ -75,11 +75,13 @@ import org.neo4j.kernel.impl.api.operations.LegacyIndexWriteOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
 import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
 import org.neo4j.kernel.impl.api.state.ConstraintIndexCreator;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
 import org.neo4j.kernel.impl.api.store.RelationshipIterator;
 import org.neo4j.kernel.impl.index.IndexEntityType;
 import org.neo4j.kernel.impl.index.LegacyIndexStore;
 import org.neo4j.kernel.impl.util.Cursors;
 import org.neo4j.register.Register.DoubleLongRegister;
+import org.neo4j.storageengine.api.Direction;
 import org.neo4j.storageengine.api.EntityType;
 import org.neo4j.storageengine.api.LabelItem;
 import org.neo4j.storageengine.api.NodeItem;
@@ -1710,6 +1712,17 @@ public class StateHandlingStatementOperations implements
             }
         }
         return storeLayer.nodeExists( id );
+    }
+
+    @Override
+    public int nodeRelationships( KernelStatement statement, RelationshipCursor cursor, long nodeId, Direction direction, int type )
+    {
+        if ( statement.hasTxStateWithChanges() )
+        {
+            throw new UnsupportedOperationException(
+                    "not implemented: use of RelationshipCursor when transaction has changes" );
+        }
+        return statement.getStoreStatement().initializeRelationshipCursor( cursor, nodeId, direction, type );
     }
 
     private static DefinedProperty definedPropertyOrNull( Property existingProperty )

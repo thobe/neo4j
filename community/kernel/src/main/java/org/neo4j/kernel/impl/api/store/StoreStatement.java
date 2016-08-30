@@ -33,7 +33,12 @@ import org.neo4j.kernel.impl.store.NeoStores;
 import org.neo4j.kernel.impl.store.NodeStore;
 import org.neo4j.kernel.impl.store.RecordCursors;
 import org.neo4j.kernel.impl.store.RelationshipStore;
+import org.neo4j.kernel.impl.store.record.NodeRecord;
+import org.neo4j.kernel.impl.store.record.Record;
+import org.neo4j.kernel.impl.store.record.RecordLoad;
+import org.neo4j.kernel.impl.store.record.RelationshipGroupRecord;
 import org.neo4j.kernel.impl.util.InstanceCache;
+import org.neo4j.storageengine.api.Direction;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 import org.neo4j.storageengine.api.StorageStatement;
@@ -260,5 +265,41 @@ public class StoreStatement implements StorageStatement
     public IndexReader getFreshIndexReader( IndexDescriptor descriptor ) throws IndexNotFoundKernelException
     {
         return indexReaderFactory().newUnCachedReader( descriptor );
+    }
+
+    @Override
+    public int initializeRelationshipCursor(
+            RelationshipCursor cursor, long nodeId, Direction direction, int type )
+    {
+        neoStores.assertOpen();
+        NodeRecord node = nodeStore.getRecord( nodeId, nodeStore.newRecord(), RecordLoad.NORMAL );
+        if ( !node.inUse() )
+        {
+            return -1;
+        }
+        if ( node.isDense() )
+        {
+            RelationshipGroupRecord group = new RelationshipGroupRecord( -1 );
+            for ( long groupId = node.getNextRel(), NONE = Record.NO_NEXT_RELATIONSHIP.intValue(); groupId != NONE; )
+            {
+                boolean inUse = recordCursors.relationshipGroup().next( groupId, group, RecordLoad.FORCE );
+                if ( inUse && group.getType() == type )
+                {
+                    assert direction != Direction.BOTH : "TODO: handle both directions";
+                    assert group.getFirstLoop() == NONE : "TODO: handle nodes with loops";
+                    return cursor.init(
+                            recordCursors.relationship(),
+                            direction == Direction.OUTGOING ? group.getFirstOut() : group.getFirstIn(),
+                            nodeId,
+                            direction,
+                            type );
+                }
+            }
+            return 0;
+        }
+        else
+        {
+            return cursor.init( recordCursors.relationship(), node.getNextRel(), nodeId, direction, type );
+        }
     }
 }

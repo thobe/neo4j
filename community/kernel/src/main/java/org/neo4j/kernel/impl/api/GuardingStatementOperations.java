@@ -35,6 +35,8 @@ import org.neo4j.kernel.api.properties.Property;
 import org.neo4j.kernel.guard.Guard;
 import org.neo4j.kernel.impl.api.operations.EntityReadOperations;
 import org.neo4j.kernel.impl.api.operations.EntityWriteOperations;
+import org.neo4j.kernel.impl.api.store.RelationshipCursor;
+import org.neo4j.storageengine.api.Direction;
 import org.neo4j.storageengine.api.NodeItem;
 import org.neo4j.storageengine.api.RelationshipItem;
 
@@ -430,5 +432,12 @@ public class GuardingStatementOperations implements
     {
         guard.check( statement );
         return entityReadDelegate.nodeExists( statement, id );
+    }
+
+    @Override
+    public int nodeRelationships( KernelStatement statement, RelationshipCursor cursor, long nodeId, Direction direction, int type )
+    {
+        guard.check( statement );
+        return entityReadDelegate.nodeRelationships( statement, cursor, nodeId, direction, type );
     }
 }
