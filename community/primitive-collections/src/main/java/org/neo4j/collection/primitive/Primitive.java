@@ -97,7 +97,7 @@ public class Primitive
         return offHeapLongLongMap( DEFAULT_OFFHEAP_CAPACITY );
     }
 
-    public static PrimitiveLongLongMap offHeapLongLongMap( int initialCapacity )
+    public static PrimitiveLongLonPgMap offHeapLongLongMap( int initialCapacity )
     {
         return new PrimitiveLongLongHashMap( new LongKeyLongValueUnsafeTable( initialCapacity ), NO_MONITOR );
     }
