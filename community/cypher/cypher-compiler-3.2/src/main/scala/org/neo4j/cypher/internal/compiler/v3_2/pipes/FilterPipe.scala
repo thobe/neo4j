@@ -29,6 +29,6 @@ case class FilterPipe(source: Pipe, predicate: Predicate)
 
   predicate.registerOwningPipe(this)
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext],state: QueryState) =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext],state: QueryState): PipeIterator[ExecutionContext] =
     input.filter(ctx => predicate.isTrue(ctx)(state))
 }

@@ -31,7 +31,7 @@ case class NodeHashJoinPipe(nodeVariables: Set[String], left: Pipe, right: Pipe)
                            (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(left, pipeMonitor) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     if (input.isEmpty)
       return Iterator.empty
 

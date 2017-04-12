@@ -34,7 +34,7 @@ case class ExpandAllPipe(source: Pipe,
                         (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.flatMap {
       row =>
         getFromNode(row) match {

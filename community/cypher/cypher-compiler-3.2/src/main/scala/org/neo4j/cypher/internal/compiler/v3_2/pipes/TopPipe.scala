@@ -69,10 +69,10 @@ case class TopNPipe(source: Pipe, sortDescription: List[SortDescription], countE
 
   countExpression.registerOwningPipe(this)
 
-  protected override def internalCreateResults(input:Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input:PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     implicit val s = state
     if (input.isEmpty)
-      Iterator.empty
+      PipeIterator.empty
     else if (sortDescription.isEmpty)
       input
     else {
@@ -81,7 +81,7 @@ case class TopNPipe(source: Pipe, sortDescription: List[SortDescription], countE
       val count = countExpression(first).asInstanceOf[Number].intValue()
 
       if (count <= 0) {
-        Iterator.empty
+        PipeIterator.empty
       } else {
 
         var result = new Array[SortDataWithContext](count)
@@ -95,7 +95,7 @@ case class TopNPipe(source: Pipe, sortDescription: List[SortDescription], countE
 
         val lessThan = new LessThanComparator(this)
         if (input.isEmpty) {
-          result.slice(0,last + 1).sorted(lessThan).iterator.map(_._2)
+          PipeIterator(result.slice(0,last + 1).sorted(lessThan)).map(_._2)
         } else {
           result = result.sorted(lessThan)
 
@@ -112,7 +112,7 @@ case class TopNPipe(source: Pipe, sortDescription: List[SortDescription], countE
                 }
               }
           }
-          result.toIterator.map(_._2)
+          PipeIterator(result).map(_._2)
         }
       }
     }
@@ -128,11 +128,11 @@ case class Top1Pipe(source: Pipe, sortDescription: List[SortDescription])
                    (implicit pipeMonitor: PipeMonitor)
   extends TopPipe(source, sortDescription)(pipeMonitor) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                      state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: PipeIterator[ExecutionContext],
+                                      state: QueryState): PipeIterator[ExecutionContext] = {
     implicit val s = state
     if (input.isEmpty)
-      Iterator.empty
+      PipeIterator.empty
     else if (sortDescription.isEmpty)
       input
     else {
@@ -149,7 +149,7 @@ case class Top1Pipe(source: Pipe, sortDescription: List[SortDescription])
             result = next
           }
       }
-      Iterator.single(result._2)
+      PipeIterator(result._2)
     }
   }
 }
@@ -162,11 +162,11 @@ case class Top1WithTiesPipe(source: Pipe, sortDescription: List[SortDescription]
                            (implicit pipeMonitor: PipeMonitor)
   extends TopPipe(source, sortDescription)(pipeMonitor) {
 
-  protected override def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  protected override def internalCreateResults(input: PipeIterator[ExecutionContext],
+                                               state: QueryState): PipeIterator[ExecutionContext] = {
     implicit val s = state
     if (input.isEmpty)
-      Iterator.empty
+      PipeIterator.empty
     else {
       val lessThan = new LessThanComparator(this)
 
@@ -187,7 +187,7 @@ case class Top1WithTiesPipe(source: Pipe, sortDescription: List[SortDescription]
             matchingRows += next._2
           }
       }
-      matchingRows.result().iterator
+      PipeIterator(matchingRows.result())
     }
   }
 

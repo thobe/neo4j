@@ -34,8 +34,8 @@ case class DeletePipe(src: Pipe, expression: Expression, forced: Boolean)
                      (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(src, pipeMonitor) with GraphElementPropertyFunctions with ListSupport {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext],
+                                               state: QueryState): PipeIterator[ExecutionContext] = {
     input.map { row =>
       expression(row)(state) match {
         case null => // do nothing

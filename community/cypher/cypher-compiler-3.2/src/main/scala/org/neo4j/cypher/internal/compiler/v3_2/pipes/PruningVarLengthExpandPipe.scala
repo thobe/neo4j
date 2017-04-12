@@ -334,8 +334,8 @@ case class PruningVarLengthExpandPipe(source: Pipe,
     }
   }
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
-    new Iterator[ExecutionContext] {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
+    new PipeIterator[ExecutionContext] {
 
       var (stateMachine, current) = new LoadNext(input, state).next()
 
@@ -352,5 +352,7 @@ case class PruningVarLengthExpandPipe(source: Pipe,
         current = nextCurrent
         temp
       }
+
+      override def close(): Unit = input.close()
     }
 }

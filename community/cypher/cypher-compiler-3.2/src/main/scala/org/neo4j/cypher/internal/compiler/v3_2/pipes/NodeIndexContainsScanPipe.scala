@@ -36,7 +36,7 @@ abstract class AbstractNodeIndexStringScanPipe(ident: String,
 
   valueExpr.registerOwningPipe(this)
 
-  override protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val baseContext = state.createOrGetInitialContext()
     val value = valueExpr(baseContext)(state)
 

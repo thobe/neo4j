@@ -30,7 +30,7 @@ case class LetSelectOrSemiApplyPipe(source: Pipe, inner: Pipe, letVarName: Strin
 
   predicate.registerOwningPipe(this)
 
-  def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.map {
       (outerContext) =>
         val holds = predicate.isTrue(outerContext)(state) || {

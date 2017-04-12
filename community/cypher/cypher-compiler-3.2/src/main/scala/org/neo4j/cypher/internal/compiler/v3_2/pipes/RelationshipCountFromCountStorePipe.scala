@@ -28,7 +28,7 @@ case class RelationshipCountFromCountStorePipe(ident: String, startLabel: Option
                                               (val id: Id = new Id)
                                               (implicit pipeMonitor: PipeMonitor) extends Pipe {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val maybeStartLabelId = getLabelId(startLabel, state)
     val maybeEndLabelId = getLabelId(endLabel, state)
 
@@ -42,7 +42,7 @@ case class RelationshipCountFromCountStorePipe(ident: String, startLabel: Option
     }
 
     val baseContext = state.createOrGetInitialContext()
-    Seq(baseContext.newWith1(ident, count)).iterator
+    PipeIterator(baseContext.newWith1(ident, count))
   }
 
   private def getLabelId(lazyLabel: Option[LazyLabel], state: QueryState): Option[Int] = lazyLabel match {

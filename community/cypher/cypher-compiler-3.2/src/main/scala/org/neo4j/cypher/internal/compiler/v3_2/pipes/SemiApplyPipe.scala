@@ -26,7 +26,7 @@ case class SemiApplyPipe(source: Pipe, inner: Pipe, negated: Boolean)
                         (val id: Id = new Id)
                         (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor) {
-  def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.filter {
       (outerContext) =>
         val innerState = state.withInitialContext(outerContext)

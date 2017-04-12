@@ -29,7 +29,7 @@ case class AssertSameNodePipe(source: Pipe, inner: Pipe, node: String)
                              (val id: Id = new Id)(implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor) {
 
-  protected def internalCreateResults(lhsResult: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(lhsResult: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     val rhsResults = inner.createResults(state)
     if (lhsResult.isEmpty != rhsResults.isEmpty) {
       throw new MergeConstraintConflictException(

@@ -27,7 +27,7 @@ case class RollUpApplyPipe(lhs: Pipe, rhs: Pipe, collectionName: String, identif
                           (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(lhs, pipeMonitor) {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) = {
     input.map {
       ctx =>
         if (nullableIdentifiers.map(ctx).contains(null)) {

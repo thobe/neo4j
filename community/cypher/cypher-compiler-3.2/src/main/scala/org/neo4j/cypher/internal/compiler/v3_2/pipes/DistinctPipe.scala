@@ -35,7 +35,7 @@ case class DistinctPipe(source: Pipe, expressions: Map[String, Expression])
 
   expressions.values.foreach(_.registerOwningPipe(this))
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     // Run the return item expressions, and replace the execution context's with their values
     val result = input.map(ctx => {
       val newMap = Eagerly.mutableMapValues(expressions, (expression: Expression) => expression(ctx)(state))

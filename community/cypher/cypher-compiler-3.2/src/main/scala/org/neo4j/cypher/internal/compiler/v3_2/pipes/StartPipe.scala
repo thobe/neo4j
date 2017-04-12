@@ -31,7 +31,7 @@ sealed abstract class StartPipe[T <: PropertyContainer](source: Pipe,
                                                         pipeMonitor:PipeMonitor) extends PipeWithSource(source, pipeMonitor) {
   def variableType: CypherType
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) = {
     input.flatMap(ctx => {
       val source = createSource(ctx, state)
       source.map(x => {

@@ -31,7 +31,7 @@ case class NodeOuterHashJoinPipe(nodeVariables: Set[String], source: Pipe, inner
   extends PipeWithSource(source, pipeMonitor) {
   val nullColumns: Map[String, Any] = nullableVariables.map(_ -> null).toMap
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
 
     if(input.isEmpty)
       return Iterator.empty

@@ -313,9 +313,9 @@ case class FullPruningVarLengthExpandPipe(source: Pipe,
   }
 
   class FullyPruningIterator(
-                       private val input: Iterator[ExecutionContext],
+                       private val input: PipeIterator[ExecutionContext],
                        val queryState: QueryState
-  ) extends Iterator[ExecutionContext] {
+  ) extends PipeIterator[ExecutionContext] {
 
     var outputRow:ExecutionContext = _
     var fullPruneState:FullPruneState = new FullPruneState( queryState )
@@ -363,9 +363,11 @@ case class FullPruningVarLengthExpandPipe(source: Pipe,
 
     private def getNodeFromRow(row: ExecutionContext): Node =
       row.getOrElse(fromName, throw new InternalException(s"Expected a node on `$fromName`")).asInstanceOf[Node]
+
+    override def close(): Unit = input.close()
   }
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     new FullyPruningIterator(input, state)
   }
 }

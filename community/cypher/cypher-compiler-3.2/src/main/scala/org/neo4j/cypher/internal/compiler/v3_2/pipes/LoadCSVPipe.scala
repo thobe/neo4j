@@ -94,7 +94,7 @@ case class LoadCSVPipe(source: Pipe,
     override def next(): ExecutionContext = context.newWith(variable -> inner.next().toIndexedSeq)
   }
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.flatMap(context => {
       implicit val s = state
       val urlString: String = urlExpression(context).asInstanceOf[String]

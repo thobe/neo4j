@@ -29,7 +29,7 @@ case class ForeachPipe(source: Pipe, inner: Pipe, variable: String, expression: 
                       (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor) with ListSupport {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
     input.map {
       (outerContext) =>
         val values = makeTraversable(expression(outerContext)(state))

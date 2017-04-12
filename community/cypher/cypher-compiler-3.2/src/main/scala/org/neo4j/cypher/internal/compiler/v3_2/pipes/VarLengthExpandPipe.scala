@@ -54,11 +54,11 @@ case class VarLengthExpandPipe(source: Pipe,
                               (val id: Id = new Id)
                               (implicit pipeMonitor: PipeMonitor) extends PipeWithSource(source, pipeMonitor) {
   private def varLengthExpand(node: Node, state: QueryState, maxDepth: Option[Int],
-                              row: ExecutionContext): Iterator[(Node, Seq[Relationship])] = {
+                              row: ExecutionContext): PipeIterator[(Node, Seq[Relationship])] = {
     val stack = new mutable.Stack[(Node, Seq[Relationship])]
     stack.push((node, Seq.empty))
 
-    new Iterator[(Node, Seq[Relationship])] {
+    new PipeIterator[(Node, Seq[Relationship])] {
       def next(): (Node, Seq[Relationship]) = {
         val (node, rels) = stack.pop()
         if (rels.length < maxDepth.getOrElse(Int.MaxValue) && filteringStep.filterNode(row,state)(node)) {
@@ -81,10 +81,12 @@ case class VarLengthExpandPipe(source: Pipe,
       }
 
       def hasNext: Boolean = stack.nonEmpty
+
+      def close(): Unit = ()
     }
   }
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.flatMap {
       row => {
         fetchFromContext(row, fromName) match {
@@ -95,7 +97,7 @@ case class VarLengthExpandPipe(source: Pipe,
                 row.newWith2(relName, rels, toName, node)
             }
 
-          case null => Iterator(row.newWith2(relName, null, toName, null))
+          case null => PipeIterator(row.newWith2(relName, null, toName, null))
 
           case value => throw new InternalException(s"Expected to find a node at $fromName but found $value instead")
         }

@@ -26,7 +26,7 @@ import org.neo4j.cypher.internal.frontend.v3_2.EntityNotFoundException
 import org.neo4j.graphdb.{Node, PropertyContainer, Relationship}
 
 abstract class IdSeekIterator[T <: PropertyContainer]
-  extends Iterator[ExecutionContext] with NumericHelper {
+  extends PipeIterator[ExecutionContext] with NumericHelper {
 
   private var cachedEntity: T = computeNextEntity()
 
@@ -68,6 +68,8 @@ final class NodeIdSeekIterator(ident: String,
 
   def next(): ExecutionContext =
     baseContext.newWith1(ident, nextEntity())
+
+  override def close(): Unit = ()
 }
 
 final class DirectedRelationshipIdSeekIterator(ident: String,
@@ -84,6 +86,8 @@ final class DirectedRelationshipIdSeekIterator(ident: String,
     val rel = nextEntity()
     baseContext.newWith3(ident, rel, fromNode, rel.getStartNode, toNode, rel.getEndNode)
   }
+
+  override def close(): Unit = ()
 }
 
 final class UndirectedRelationshipIdSeekIterator(ident: String,
@@ -113,4 +117,6 @@ final class UndirectedRelationshipIdSeekIterator(ident: String,
       baseContext.newWith3(ident, lastEntity, fromNode, lastStart, toNode, lastEnd)
     }
   }
+
+  override def close(): Unit = ()
 }

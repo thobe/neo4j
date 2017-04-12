@@ -24,11 +24,12 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 
 case class EmptyResultPipe(source: Pipe)(val id: Id = new Id)(implicit pipeMonitor: PipeMonitor) extends PipeWithSource(source, pipeMonitor) {
 
-  protected def internalCreateResults(input:Iterator[ExecutionContext], state: QueryState) = {
+  protected def internalCreateResults(input:PipeIterator[ExecutionContext], state: QueryState) = {
     while(input.hasNext) {
       input.next()
     }
+    input.close()
 
-    Iterator.empty
+    PipeIterator.empty
   }
 }

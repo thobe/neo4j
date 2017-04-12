@@ -27,7 +27,7 @@ import org.neo4j.cypher.internal.compiler.v3_2.IndexDescriptor
 
 class ConstraintOperationPipe(op: PropertyConstraintOperation, keyToken: KeyToken, propertyKey: KeyToken)
                              (val id: Id = new Id)(implicit val monitor: PipeMonitor) extends Pipe {
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val keyTokenId = keyToken.getOrCreateId(state.query)
     val propertyKeyId = propertyKey.getOrCreateId(state.query)
 

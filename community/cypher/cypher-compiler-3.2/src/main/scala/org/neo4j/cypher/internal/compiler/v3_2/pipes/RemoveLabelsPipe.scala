@@ -30,8 +30,8 @@ case class RemoveLabelsPipe(src: Pipe, variable: String, labels: Seq[LazyLabel])
                            (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(src, pipeMonitor) with GraphElementPropertyFunctions with ListSupport {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext],
+                                               state: QueryState): PipeIterator[ExecutionContext] = {
     input.map { row =>
       val item = row.get(variable).get
       if (item != null) removeLabels(row, state, CastSupport.castOrFail[Node](item).getId)

@@ -25,15 +25,15 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 import org.neo4j.cypher.internal.frontend.v3_2.CypherTypeException
 import org.neo4j.graphdb.Node
 
+import scala.collection.Iterator
 import scala.collection.mutable.ListBuffer
-import scala.collection.{AbstractIterator, Iterator}
 
 case class TriadicSelectionPipe(positivePredicate: Boolean, left: Pipe, source: String, seen: String, target: String, right: Pipe)
                                (val id: Id = new Id)
                                (implicit pipeMonitor: PipeMonitor)
 extends PipeWithSource(left, pipeMonitor) {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) = {
     var triadicState: PrimitiveLongSet = null
     // 1. Build
     new LazyGroupingIterator[ExecutionContext](input) {
@@ -64,7 +64,7 @@ extends PipeWithSource(left, pipeMonitor) {
   }
 }
 
-abstract class LazyGroupingIterator[ROW >: Null <: AnyRef](val input: Iterator[ROW]) extends AbstractIterator[ROW] {
+abstract class LazyGroupingIterator[ROW >: Null <: AnyRef](val input: PipeIterator[ROW]) extends PipeIterator[ROW] {
   def setState(state: PrimitiveLongSet)
   def getKey(row: ROW): Any
   def getValue(row: ROW): Option[Long]
@@ -118,4 +118,6 @@ abstract class LazyGroupingIterator[ROW >: Null <: AnyRef](val input: Iterator[R
     for (value <- getValue(row))
       triadicSet.add(value)
   }
+
+  override def close(): Unit = input.close()
 }

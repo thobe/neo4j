@@ -33,7 +33,7 @@ case class OptionalExpandAllPipe(source: Pipe, fromName: String, relName: String
 
   predicate.registerOwningPipe(this)
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     implicit val s = state
 
     input.flatMap {

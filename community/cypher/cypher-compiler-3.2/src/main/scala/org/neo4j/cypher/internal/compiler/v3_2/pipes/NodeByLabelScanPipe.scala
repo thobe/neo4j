@@ -28,7 +28,7 @@ case class NodeByLabelScanPipe(ident: String, label: LazyLabel)
   extends Pipe
   {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
 
     label.getOptId(state.query) match {
       case Some(labelId) =>

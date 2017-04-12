@@ -33,11 +33,11 @@ case class UnwindPipe(source: Pipe, collection: Expression, variable: String)
 
   collection.registerOwningPipe(this)
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
-    if (input.hasNext) new UnwindIterator(input, state) else Iterator.empty
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
+    if (input.hasNext) new UnwindIterator(input, state) else PipeIterator.empty
   }
 
-  private class UnwindIterator(input: Iterator[ExecutionContext], state: QueryState) extends Iterator[ExecutionContext] {
+  private class UnwindIterator(input: PipeIterator[ExecutionContext], state: QueryState) extends PipeIterator[ExecutionContext] {
     private var context: ExecutionContext = null
     private var unwindIterator: Iterator[Any] = null
     private var nextItem: ExecutionContext = null
@@ -67,5 +67,7 @@ case class UnwindPipe(source: Pipe, collection: Expression, variable: String)
         }
       }
     }
+
+    override def close(): Unit = input.close()
   }
 }

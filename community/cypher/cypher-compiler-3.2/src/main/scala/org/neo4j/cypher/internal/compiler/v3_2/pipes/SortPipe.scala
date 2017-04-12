@@ -26,7 +26,7 @@ case class SortPipe(source: Pipe, orderBy: Seq[SortDescription])
                    (val id: Id = new Id)
                    (implicit monitor: PipeMonitor)
   extends PipeWithSource(source, monitor) {
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     val array = input.toArray
     java.util.Arrays.sort(array, new InnerOrdering(orderBy)(state))
     array.toIterator

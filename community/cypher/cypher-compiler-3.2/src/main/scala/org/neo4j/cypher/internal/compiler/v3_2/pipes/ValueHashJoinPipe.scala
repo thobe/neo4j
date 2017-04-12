@@ -31,20 +31,20 @@ case class ValueHashJoinPipe(lhsExpression: Expression, rhsExpression: Expressio
                             (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(left, pipeMonitor) {
 
-  override protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     implicit val x = state
     if (input.isEmpty)
-      return Iterator.empty
+      return PipeIterator.empty
 
     val rhsIterator = right.createResults(state)
 
     if (rhsIterator.isEmpty)
-      return Iterator.empty
+      return PipeIterator.empty
 
     val table = buildProbeTable(input)
 
     if (table.isEmpty)
-      return Iterator.empty
+      return PipeIterator.empty
 
     val result = for {context: ExecutionContext <- rhsIterator
                       joinKey = rhsExpression(context) if joinKey != null}

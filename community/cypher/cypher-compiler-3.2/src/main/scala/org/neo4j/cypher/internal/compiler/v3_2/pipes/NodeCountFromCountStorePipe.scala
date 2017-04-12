@@ -27,7 +27,7 @@ case class NodeCountFromCountStorePipe(ident: String, label: Option[LazyLabel])
                                       (val id: Id = new Id)
                                       (implicit pipeMonitor: PipeMonitor) extends Pipe {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val baseContext = state.createOrGetInitialContext()
     val count = label match {
       case Some(lazyLabel) => lazyLabel.getOptId(state.query) match {

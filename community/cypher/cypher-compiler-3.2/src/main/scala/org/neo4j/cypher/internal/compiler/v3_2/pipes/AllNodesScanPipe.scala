@@ -25,7 +25,7 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 case class AllNodesScanPipe(ident: String)(val id: Id = new Id)
                            (implicit pipeMonitor: PipeMonitor) extends Pipe {
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val baseContext = state.createOrGetInitialContext()
     state.query.nodeOps.all.map(n => baseContext.newWith1(ident, n))
   }

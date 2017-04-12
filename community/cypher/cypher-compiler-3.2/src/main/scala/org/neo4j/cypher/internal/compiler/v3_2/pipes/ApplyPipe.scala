@@ -25,7 +25,7 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 case class ApplyPipe(source: Pipe, inner: Pipe)(val id: Id = new Id)
                     (implicit pipeMonitor: PipeMonitor) extends PipeWithSource(source, pipeMonitor) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
     input.flatMap {
       (outerContext) =>
         val original = outerContext.clone()

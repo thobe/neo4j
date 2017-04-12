@@ -33,7 +33,7 @@ case class OptionalPipe(nullableVariables: Set[String], source: Pipe)
     context
   }
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
-    if (input.isEmpty) Iterator(notFoundExecutionContext(state.initialContext))
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
+    if (input.isEmpty) PipeIterator(notFoundExecutionContext(state.initialContext))
     else input
 }

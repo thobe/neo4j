@@ -31,7 +31,7 @@ case class DirectedRelationshipByIdSeekPipe(ident: String, relIdExpr: SeekArgs, 
 
   relIdExpr.registerOwningPipe(this)
 
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val ctx = state.createOrGetInitialContext()
     val relIds = relIdExpr.expressions(ctx, state).flatMap(Option(_))
     new DirectedRelationshipIdSeekIterator(ident, fromNode, toNode, ctx, state.query.relationshipOps, relIds.iterator)

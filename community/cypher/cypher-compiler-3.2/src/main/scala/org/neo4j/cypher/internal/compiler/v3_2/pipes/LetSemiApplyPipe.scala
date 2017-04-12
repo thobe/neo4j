@@ -25,7 +25,7 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 case class LetSemiApplyPipe(source: Pipe, inner: Pipe, letVarName: String, negated: Boolean)
                            (val id: Id = new Id)
                            (implicit pipeMonitor: PipeMonitor) extends PipeWithSource(source, pipeMonitor) {
-  def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.map {
       (outerContext) =>
         val innerState = state.withInitialContext(outerContext)

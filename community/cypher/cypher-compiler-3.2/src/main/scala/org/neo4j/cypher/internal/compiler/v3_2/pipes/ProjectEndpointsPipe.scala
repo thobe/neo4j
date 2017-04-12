@@ -33,9 +33,9 @@ case class ProjectEndpointsPipe(source: Pipe, relName: String,
                                (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor)
   with ListSupport  {
-  type Projector = (ExecutionContext) => Iterator[ExecutionContext]
+  type Projector = (ExecutionContext) => PipeIterator[ExecutionContext]
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) =
     input.flatMap(projector(state.query))
 
   private def projector(qtx: QueryContext): Projector =
@@ -44,30 +44,30 @@ case class ProjectEndpointsPipe(source: Pipe, relName: String,
   private def projectVarLength(qtx: QueryContext): Projector = (context: ExecutionContext) => {
     findVarLengthRelEndpoints(context, qtx) match {
       case Some((startNode, endNode, _)) if directed =>
-        Iterator(
+        PipeIterator(
           context.newWith2(start, startNode, end, endNode)
         )
       case Some((startNode, endNode, rels)) if !directed =>
-        Iterator(
+        PipeIterator(Seq(
           context.newWith2(start, startNode, end, endNode),
           context.newWith3(start, endNode, end, startNode, relName, rels.reverse)
-        )
+        ))
       case None =>
-        Iterator.empty
+        PipeIterator.empty
     }
   }
 
   private def project(qtx: QueryContext): Projector = (context: ExecutionContext) => {
     findSimpleLengthRelEndpoints(context, qtx) match {
       case Some((startNode, endNode)) if directed =>
-        Iterator(context.newWith2(start, startNode, end, endNode))
+        PipeIterator(context.newWith2(start, startNode, end, endNode))
       case Some((startNode, endNode)) if !directed =>
-        Iterator(
+        PipeIterator(Seq(
           context.newWith2(start, startNode, end, endNode),
           context.newWith2(start, endNode, end, startNode)
-        )
+        ))
       case None =>
-        Iterator.empty
+        PipeIterator.empty
     }
   }
 

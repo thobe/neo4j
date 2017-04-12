@@ -33,7 +33,7 @@ case class ProjectionPipe(source: Pipe, expressions: Map[String, Expression])
 
   expressions.values.foreach(_.registerOwningPipe(this))
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) = {
     input.map {
       ctx =>
         expressions.foreach {

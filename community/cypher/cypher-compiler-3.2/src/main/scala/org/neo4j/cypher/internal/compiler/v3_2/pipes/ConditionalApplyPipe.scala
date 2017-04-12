@@ -26,7 +26,7 @@ case class ConditionalApplyPipe(source: Pipe, inner: Pipe, items: Seq[String], n
                                (val id: Id = new Id)(implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(source, pipeMonitor) {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
     input.flatMap {
       (outerContext) =>
         if (condition(outerContext)) {

@@ -36,7 +36,7 @@ case class EagerAggregationPipe(source: Pipe, keyExpressions: Set[String], aggre
 
   aggregations.values.foreach(_.registerOwningPipe(this))
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState) = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState) = {
 
     implicit val s = state
 
@@ -46,13 +46,13 @@ case class EagerAggregationPipe(source: Pipe, keyExpressions: Set[String], aggre
     val keyNamesSize = keyNames.size
     val mapSize = keyNamesSize + aggregationNames.size
 
-    def createEmptyResult(params: Map[String, Any]): Iterator[ExecutionContext] = {
+    def createEmptyResult(params: Map[String, Any]): PipeIterator[ExecutionContext] = {
       val newMap = MutableMaps.empty
       val aggregationNamesAndFunctions = aggregationNames zip aggregations.map(_._2.createAggregationFunction.result)
 
       aggregationNamesAndFunctions.toMap
         .foreach { case (name, zeroValue) => newMap += name -> zeroValue}
-      Iterator.single(ExecutionContext(newMap))
+      PipeIterator(ExecutionContext(newMap))
     }
 
     // This code is not pretty. It's full of asInstanceOf calls and other things that might irk you.

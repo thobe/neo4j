@@ -34,7 +34,7 @@ case class OptionalExpandIntoPipe(source: Pipe, fromName: String, relName: Strin
   extends PipeWithSource(source, pipeMonitor) with CachingExpandInto {
   private final val CACHE_SIZE = 100000
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     //cache of known connected nodes
     val relCache = new RelationshipsCache(CACHE_SIZE)
 

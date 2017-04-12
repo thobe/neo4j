@@ -20,7 +20,7 @@
 package org.neo4j.cypher.internal.compiler.v3_2.profiler
 
 import org.neo4j.cypher.internal.compiler.v3_2._
-import org.neo4j.cypher.internal.compiler.v3_2.pipes.{Pipe, PipeDecorator, QueryState}
+import org.neo4j.cypher.internal.compiler.v3_2.pipes.{Pipe, PipeDecorator, PipeIterator, QueryState}
 import org.neo4j.cypher.internal.compiler.v3_2.planDescription.InternalPlanDescription.Arguments
 import org.neo4j.cypher.internal.compiler.v3_2.planDescription.{Id, InternalPlanDescription}
 import org.neo4j.cypher.internal.compiler.v3_2.spi._
@@ -38,7 +38,7 @@ class Profiler extends PipeDecorator {
   private var parentPipe: Option[Pipe] = None
 
 
-  def decorate(pipe: Pipe, iter: Iterator[ExecutionContext]): Iterator[ExecutionContext] = {
+  def decorate(pipe: Pipe, iter: PipeIterator[ExecutionContext]): PipeIterator[ExecutionContext] = {
     val oldCount = rowStats.get(pipe.id).map(_.count).getOrElse(0L)
     val context = dbHitsStats(pipe.id)
 
@@ -86,7 +86,7 @@ class Profiler extends PipeDecorator {
     def decorate(pipe: Pipe, state: QueryState): QueryState =
       outerProfiler.decorate(owningPipe, state)
 
-    def decorate(pipe: Pipe, iter: Iterator[ExecutionContext]): Iterator[ExecutionContext] = iter
+    def decorate(pipe: Pipe, iter: PipeIterator[ExecutionContext]): PipeIterator[ExecutionContext] = iter
 
     def decorate(plan: InternalPlanDescription, isProfileReady: => Boolean): InternalPlanDescription =
       outerProfiler.decorate(plan, isProfileReady)
@@ -132,9 +132,9 @@ final class ProfilingPipeQueryContext(inner: QueryContext, val p: Pipe)
   override def relationshipOps: Operations[Relationship] = new ProfilerOperations(inner.relationshipOps)
 }
 
-class ProfilingIterator(inner: Iterator[ExecutionContext], startValue: Long, queryContext: ProfilingPipeQueryContext,
+class ProfilingIterator(inner: PipeIterator[ExecutionContext], startValue: Long, queryContext: ProfilingPipeQueryContext,
                         pipeId: Id, pageCacheStats:mutable.Map[Id, (Long, Long)]) extends
-  Iterator[ExecutionContext] with Counter {
+  PipeIterator[ExecutionContext] with Counter {
 
   _count = startValue
 
@@ -153,4 +153,6 @@ class ProfilingIterator(inner: Iterator[ExecutionContext], startValue: Long, que
     increment()
     inner.next()
   }
+
+  def close(): Unit = inner.close()
 }

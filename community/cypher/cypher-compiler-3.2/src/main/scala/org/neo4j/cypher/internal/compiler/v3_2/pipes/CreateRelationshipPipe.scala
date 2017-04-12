@@ -34,7 +34,7 @@ abstract class BaseRelationshipPipe(src: Pipe, key: String, startNode: String, t
                                     properties: Option[Expression], pipeMonitor: PipeMonitor)
   extends PipeWithSource(src, pipeMonitor) with GraphElementPropertyFunctions with ListSupport {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
     input.map(createRelationship(_, state))
 
   private def createRelationship(context: ExecutionContext, state: QueryState): ExecutionContext = {

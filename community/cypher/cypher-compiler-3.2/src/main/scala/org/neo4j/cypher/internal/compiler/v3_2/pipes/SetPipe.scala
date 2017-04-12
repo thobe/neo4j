@@ -26,8 +26,8 @@ case class SetPipe(src: Pipe, setOperation: SetOperation)
                   (val id: Id = new Id)
                   (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(src, pipeMonitor) {
-  override protected def internalCreateResults(input: Iterator[ExecutionContext],
-                                               state: QueryState): Iterator[ExecutionContext] = {
+  override protected def internalCreateResults(input: PipeIterator[ExecutionContext],
+                                               state: QueryState): PipeIterator[ExecutionContext] = {
     input.map { row =>
       setOperation.set(row, state)
       row

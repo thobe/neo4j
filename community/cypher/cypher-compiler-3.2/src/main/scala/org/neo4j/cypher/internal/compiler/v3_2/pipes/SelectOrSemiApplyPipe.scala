@@ -30,7 +30,7 @@ case class SelectOrSemiApplyPipe(source: Pipe, inner: Pipe, predicate: Predicate
 
   predicate.registerOwningPipe(this)
 
-  def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] = {
+  def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] = {
     input.filter {
       (outerContext) =>
         predicate.isTrue(outerContext)(state) || {

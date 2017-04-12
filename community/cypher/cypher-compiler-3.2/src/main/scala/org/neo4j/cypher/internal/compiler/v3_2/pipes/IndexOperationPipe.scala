@@ -25,7 +25,7 @@ import org.neo4j.cypher.internal.compiler.v3_2.planDescription.Id
 import org.neo4j.cypher.internal.frontend.v3_2.SyntaxException
 
 case class IndexOperationPipe(indexOp: IndexOperation)(val id: Id = new Id)(implicit val monitor: PipeMonitor) extends Pipe {
-  protected def internalCreateResults(state: QueryState): Iterator[ExecutionContext] = {
+  protected def internalCreateResults(state: QueryState): PipeIterator[ExecutionContext] = {
     val queryContext = state.query
 
     val labelId = queryContext.getOrCreateLabelId(indexOp.label)
@@ -43,7 +43,7 @@ case class IndexOperationPipe(indexOp: IndexOperation)(val id: Id = new Id)(impl
         throw new UnsupportedOperationException("Unknown IndexOperation encountered")
     }
 
-    Iterator.empty
+    PipeIterator.empty
   }
 
   private def single[T](s: Seq[T]): T = {

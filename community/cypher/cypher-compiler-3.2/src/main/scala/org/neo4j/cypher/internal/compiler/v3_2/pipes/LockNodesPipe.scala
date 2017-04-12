@@ -27,7 +27,7 @@ case class LockNodesPipe(src: Pipe, variablesToLock: Set[String])(val id: Id = n
                         (implicit pipeMonitor: PipeMonitor)
   extends PipeWithSource(src, pipeMonitor)  {
 
-  protected def internalCreateResults(input: Iterator[ExecutionContext], state: QueryState): Iterator[ExecutionContext] =
+  protected def internalCreateResults(input: PipeIterator[ExecutionContext], state: QueryState): PipeIterator[ExecutionContext] =
     input.map { ctx =>
       val nodesToLock: Set[Long] = variablesToLock.flatMap { varName =>
         Option(ctx(varName).asInstanceOf[Node]).map(_.getId)
