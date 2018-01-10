@@ -19,32 +19,31 @@
  */
 package org.neo4j.values.storable;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-
-import static org.neo4j.values.storable.ThrowingValueWriter.throwing;
-
-public class ThrowingValueWriterTest
+public enum Comparison
 {
-    @Rule
-    public ExpectedException exception = ExpectedException.none();
+    LHS_SMALLER_THAN_RHS( 1 ),
+    LHS_EQUAL_TO_RHS( 0 ),
+    LHS_GREATER_THAN_RHS( -1 );
+    private final int cmp;
 
-    @Test
-    public void shouldBeAbleToThrowFromValueWriter() throws TestException
+    Comparison( int cmp )
     {
-        // Given
-        Value value = Values.of( "This is a value" );
-        ValueWriter<TestException> writer = throwing( TestException::new );
-
-        // Expect
-        exception.expect( TestException.class );
-
-        // When
-        value.writeTo( writer );
+        this.cmp = cmp;
     }
 
-    private static class TestException extends Exception
+    public static Comparison comparison( long cmp )
     {
+        if ( cmp == 0 )
+        {
+            return LHS_EQUAL_TO_RHS;
+        }
+        if ( cmp < 0 )
+        {
+            return LHS_SMALLER_THAN_RHS;
+        }
+        else
+        {
+            return LHS_GREATER_THAN_RHS;
+        }
     }
 }

@@ -19,6 +19,12 @@
  */
 package org.neo4j.values;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetTime;
+import java.time.ZonedDateTime;
+import java.time.temporal.TemporalAmount;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -30,8 +36,11 @@ import org.neo4j.values.storable.BooleanValue;
 import org.neo4j.values.storable.ByteArray;
 import org.neo4j.values.storable.ByteValue;
 import org.neo4j.values.storable.CharArray;
+import org.neo4j.values.storable.DateTimeValue;
+import org.neo4j.values.storable.DateValue;
 import org.neo4j.values.storable.DoubleArray;
 import org.neo4j.values.storable.DoubleValue;
+import org.neo4j.values.storable.DurationValue;
 import org.neo4j.values.storable.FloatArray;
 import org.neo4j.values.storable.FloatValue;
 import org.neo4j.values.storable.FloatingPointArray;
@@ -40,6 +49,8 @@ import org.neo4j.values.storable.IntArray;
 import org.neo4j.values.storable.IntValue;
 import org.neo4j.values.storable.IntegralArray;
 import org.neo4j.values.storable.IntegralValue;
+import org.neo4j.values.storable.LocalDateTimeValue;
+import org.neo4j.values.storable.LocalTimeValue;
 import org.neo4j.values.storable.LongArray;
 import org.neo4j.values.storable.LongValue;
 import org.neo4j.values.storable.NumberArray;
@@ -51,6 +62,7 @@ import org.neo4j.values.storable.ShortValue;
 import org.neo4j.values.storable.StringArray;
 import org.neo4j.values.storable.TextArray;
 import org.neo4j.values.storable.TextValue;
+import org.neo4j.values.storable.TimeValue;
 import org.neo4j.values.virtual.MapValue;
 import org.neo4j.values.virtual.PathValue;
 import org.neo4j.values.virtual.VirtualNodeValue;
@@ -185,6 +197,18 @@ public interface ValueMapper<Base>
         return mapFloatingPointArray( value );
     }
 
+    Base mapDateTime( DateTimeValue value );
+
+    Base mapLocalDateTime( LocalDateTimeValue value );
+
+    Base mapDate( DateValue value );
+
+    Base mapTime( TimeValue value );
+
+    Base mapLocalTime( LocalTimeValue value );
+
+    Base mapDuration( DurationValue value );
+
     Base mapPoint( PointValue value );
 
     default Base mapPointArray( PointArray value )
@@ -284,6 +308,42 @@ public interface ValueMapper<Base>
 
         @Override
         public double[] mapDoubleArray( DoubleArray value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public ZonedDateTime mapDateTime( DateTimeValue value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public LocalDateTime mapLocalDateTime( LocalDateTimeValue value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public LocalDate mapDate( DateValue value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public OffsetTime mapTime( TimeValue value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public LocalTime mapLocalTime( LocalTimeValue value )
+        {
+            return value.asObjectCopy();
+        }
+
+        @Override
+        public TemporalAmount mapDuration( DurationValue value )
         {
             return value.asObjectCopy();
         }
