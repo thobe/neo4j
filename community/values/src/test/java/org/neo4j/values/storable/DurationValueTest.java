@@ -43,13 +43,17 @@ import static java.time.temporal.ChronoUnit.YEARS;
 import static java.util.Collections.singletonList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.fail;
 import static org.neo4j.helpers.collection.Pair.pair;
 import static org.neo4j.values.storable.DateTimeValue.datetime;
 import static org.neo4j.values.storable.DateValue.date;
 import static org.neo4j.values.storable.DurationValue.between;
+import static org.neo4j.values.storable.DurationValue.compare;
 import static org.neo4j.values.storable.DurationValue.duration;
 import static org.neo4j.values.storable.DurationValue.durationBetween;
+import static org.neo4j.values.storable.DurationValue.order;
 import static org.neo4j.values.storable.DurationValue.parse;
 import static org.neo4j.values.storable.LocalTimeValue.localTime;
 import static org.neo4j.values.storable.TimeValue.time;
@@ -477,6 +481,76 @@ public class DurationValueTest
             assertEquals( diffBA.prettyPrint(), a, b.plus( diffBA ) );
             assertEquals( diffABs.prettyPrint(), b, a.plus( diffABs ) );
             assertEquals( diffBAs.prettyPrint(), a, b.plus( diffBAs ) );
+        }
+    }
+
+    @Test
+    public void shouldAlwaysBeInSameOrderIfComparisonIsDefined() throws Exception
+    {
+        assertComparesAndOrdersAsEqual( duration( 0, 0, 0, 0 ), duration( 0, 0, 0, 0 ) );
+        assertComparesAndOrdersAsEqual( duration( 1, 2, 3, 4 ), duration( 1, 2, 3, 4 ) );
+        assertOrderEqualsCompare( duration( 4, 0, 0, 0 ), duration( 5, 0, 0, 0 ) );
+        assertOrderEqualsCompare( duration( 100, 9, 66, 123456789 ), duration( 20, 9, 66, 123456789 ) );
+        assertOrderEqualsCompare( duration( 0, 1, 0, 0 ), duration( 0, -1, 0, 0 ) );
+        assertOrderEqualsCompare( duration( 24, 1024, 555, 999_000 ), duration( 24, 512, 555, 999_000 ) );
+        assertOrderEqualsCompare( duration( 0, 0, -10, 0 ), duration( 0, 0, -20, 0 ) );
+        assertOrderEqualsCompare( duration( 0, 0, -10, 123456780 ), duration( 0, 0, -20, 123456789 ) );
+        assertOrderEqualsCompare( duration( 555, 92, 1024, 1234 ), duration( 555, 92, 768, 5678 ) );
+        assertOrderEqualsCompare( duration( 0, 0, 0, 1 ), duration( 0, 0, 0, -2 ) );
+        assertOrderEqualsCompare( duration( 6, 2000, 11, 900000000 ), duration( 6, 2000, 11, 9 ) );
+        // tricky things:
+        assertOrderEqualsCompare( duration( 1L << 32, 0, 0, 0 ), duration( 1L << 32, 0, 1, 0 ) );
+        assertOrderEqualsCompare( duration( 1L << 52, 1, 0, 0 ), duration( 1L << 52, 0, 0, 0 ) );
+        assertOrderEqualsCompare( duration( (1L << 54) + 1, 0, 0, 0 ), duration( 1L << 54, 0, 0, 0 ) );
+    }
+
+    @Test
+    public void shouldNotCompareIncomparableDurations() throws Exception
+    {
+        assertNull( compare( duration( 1, 0, 0, 0 ), duration( 0, 30, 0, 0 ) ) );
+        assertNull( compare( duration( 0, 1, 0, 0 ), duration( 0, 0, 24 * 3600, 0 ) ) );
+    }
+
+    @Test
+    public void shouldDefineTotalOrderForIncomparableDurations() throws Exception
+    {
+        assertEquals( Comparison.LHS_GREATER_THAN_RHS, order( duration( 1, 0, 0, 0 ), duration( 0, 30, 0, 0 ) ) );
+        assertEquals( Comparison.LHS_SMALLER_THAN_RHS, order( duration( 1, 0, 0, 0 ), duration( 0, 31, 0, 0 ) ) );
+        assertEquals( Comparison.LHS_EQUAL_TO_RHS, order( duration( 0, 1, 0, 0 ), duration( 0, 0, 24 * 3600, 0 ) ) );
+        if ( Comparison.LHS_EQUAL_TO_RHS != order( duration( 48, 0, 0, 0 ), duration( 0, 1461, 0, 0 ) ) )
+        {
+            // that's ok, strictly speaking they are equal, but all we are doing is providing a total order
+        }
+        assertEquals( Comparison.LHS_SMALLER_THAN_RHS, order(
+                duration( 48, 0, 0, 0 ), duration( 0, 1460, 24 * 3600, 1 ) ) );
+    }
+
+    private void assertComparesAndOrdersAsEqual( DurationValue lhs, DurationValue rhs )
+    {
+        assertEquals( Comparison.LHS_EQUAL_TO_RHS, compare( lhs, rhs ) );
+        assertEquals( Comparison.LHS_EQUAL_TO_RHS, order( lhs, rhs ) );
+        assertEquals( Comparison.LHS_EQUAL_TO_RHS, compare( rhs, lhs ) );
+        assertEquals( Comparison.LHS_EQUAL_TO_RHS, order( rhs, lhs ) );
+    }
+
+    private static void assertOrderEqualsCompare( DurationValue lhs, DurationValue rhs )
+    {
+        Comparison cLR = compare( lhs, rhs );
+        Comparison oLR = order( lhs, rhs );
+        assertSame( cLR, oLR );
+        Comparison cRL = compare( rhs, lhs );
+        Comparison oRL = order( rhs, lhs );
+        assertSame( cRL, oRL );
+        switch ( cLR )
+        {
+        case LHS_SMALLER_THAN_RHS:
+            assertEquals( Comparison.LHS_GREATER_THAN_RHS, cRL );
+            break;
+        case LHS_GREATER_THAN_RHS:
+            assertEquals( Comparison.LHS_SMALLER_THAN_RHS, cRL );
+            break;
+        default:
+            fail( "Unexpected comparison: " + cLR );
         }
     }
 }

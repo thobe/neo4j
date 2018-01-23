@@ -38,6 +38,8 @@ import org.neo4j.values.ValueMapper;
 import org.neo4j.values.virtual.MapValue;
 
 import static java.lang.Long.parseLong;
+import static java.lang.Math.addExact;
+import static java.lang.Math.multiplyExact;
 import static java.time.temporal.ChronoField.EPOCH_DAY;
 import static java.time.temporal.ChronoField.NANO_OF_SECOND;
 import static java.time.temporal.ChronoField.OFFSET_SECONDS;
@@ -55,6 +57,7 @@ import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
 import static org.neo4j.values.storable.NumberType.NO_NUMBER;
+import static org.neo4j.values.storable.Comparison.comparison;
 
 /**
  * We use our own implementation because neither {@link java.time.Duration} nor {@link java.time.Period} fits our needs.
@@ -189,6 +192,136 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
 
     public abstract static class Compiler<Input> extends DurationBuilder<Input,MethodHandle>
     {
+    }
+
+    /**
+     * Durations are comparable if they only differ in at most one field. Where the fields are:
+     * <ul>
+     * <li>months</li>
+     * <li>days</li>
+     * <li>seconds (with nanoseconds)</li>
+     * </ul>
+     * <p>
+     * Used for implementing {@code <}, {@code >}, {@code <=}, and {@code >=}.
+     */
+    public static Comparison compare( DurationValue lhs, DurationValue rhs )
+    {
+        return cmp( lhs, rhs, false );
+    }
+
+    /**
+     * Orders two durations by normalising/averaging all fields to seconds and ordering by the result.
+     * <p>
+     * Used for implementing {@code ORDER BY}
+     */
+    public static Comparison order( DurationValue lhs, DurationValue rhs )
+    {
+        return cmp( lhs, rhs, true );
+    }
+
+    private static Comparison cmp( DurationValue lhs, DurationValue rhs, boolean total )
+    {
+        if ( lhs.seconds != rhs.seconds || lhs.nanos != rhs.nanos )
+        {
+            if ( lhs.days == rhs.days )
+            {
+                if ( lhs.months == rhs.months )
+                {
+                    return lhs.seconds == rhs.seconds
+                            ? comparison( lhs.nanos - rhs.nanos )
+                            : comparison( lhs.seconds - rhs.seconds );
+                }
+                else
+                {
+                    if ( total )
+                    {
+                        return cmpMonthsSeconds( lhs, rhs );
+                    }
+                }
+            }
+            else if ( lhs.months == rhs.months )
+            {
+                if ( total )
+                {
+                    return cmpDaysSeconds( lhs, rhs );
+                }
+            }
+            else
+            {
+                if ( total )
+                {
+                    return cmpMonthsDaysSeconds( lhs, rhs );
+                }
+            }
+        }
+        else if ( lhs.days != rhs.days )
+        {
+            if ( lhs.months == rhs.months )
+            {
+                return comparison( lhs.days - rhs.days );
+            }
+            else
+            {
+                if ( total )
+                {
+                    return cmpMonthsDays( lhs, rhs );
+                }
+            }
+        }
+        else
+        {
+            return comparison( lhs.months - rhs.months );
+        }
+        return null;
+    }
+
+    private static Comparison cmpMonthsSeconds( DurationValue lhs, DurationValue rhs )
+    {
+        double l = lhs.months * AVERAGE_DAYS_PER_MONTH * SECONDS_PER_DAY + lhs.seconds;
+        double r = rhs.months * AVERAGE_DAYS_PER_MONTH * SECONDS_PER_DAY + rhs.seconds;
+        return l == r ? comparison( lhs.months - rhs.months ) : comparison( Double.compare( l, r ) );
+    }
+
+    private static Comparison cmpDaysSeconds( DurationValue lhs, DurationValue rhs )
+    {
+        try
+        {
+            long l = addExact( multiplyExact( lhs.days, SECONDS_PER_DAY ), lhs.seconds );
+            long r = addExact( multiplyExact( rhs.days, SECONDS_PER_DAY ), rhs.seconds );
+            return comparison( l - r );
+        }
+        catch ( ArithmeticException e )
+        {
+            return comparison( lhs.days - rhs.days );
+        }
+    }
+
+    private static Comparison cmpMonthsDaysSeconds( DurationValue lhs, DurationValue rhs )
+    {
+        double l = (lhs.months * AVERAGE_DAYS_PER_MONTH + lhs.days) * SECONDS_PER_DAY + lhs.seconds;
+        double r = (rhs.months * AVERAGE_DAYS_PER_MONTH + rhs.days) * SECONDS_PER_DAY + rhs.seconds;
+        if ( l == r )
+        {
+            if ( l > (1L << 53) )
+            {
+                return comparison( lhs.months - rhs.months );
+            }
+            else
+            {
+                return comparison( lhs.nanos - rhs.nanos );
+            }
+        }
+        else
+        {
+            return comparison( Double.compare( l, r ) );
+        }
+    }
+
+    private static Comparison cmpMonthsDays( DurationValue lhs, DurationValue rhs )
+    {
+        double l = lhs.months * AVERAGE_DAYS_PER_MONTH + lhs.days;
+        double r = rhs.months * AVERAGE_DAYS_PER_MONTH + rhs.days;
+        return l == r ? comparison( lhs.months - rhs.months ) : comparison( Double.compare( l, r ) );
     }
 
     private static final DurationValue ZERO = new DurationValue( 0, 0, 0, 0 );
