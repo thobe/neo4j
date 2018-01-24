@@ -28,6 +28,7 @@ import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalUnit;
 import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
@@ -70,14 +71,43 @@ public final class TimeValue extends TemporalValue<OffsetTime,TimeValue>
         return parse( TimeValue.class, PATTERN, TimeValue::parse, text, defaultZone );
     }
 
-    public static StructureBuilder<AnyValue,TimeValue> builder( Supplier<ZoneId> defaultZone )
+    public static StructureBuilder<AnyValue,TimeValue> builder( Function<String,Clock> clockProvider )
     {
-        return new TimeBuilder<AnyValue,TimeValue>()
+        return new TimeBuilder<AnyValue,Clock,TimeValue>()
         {
+            @Override
+            protected TimeValue fromSingle( AnyValue input )
+            {
+                return singleValue( TimeValue::parse, "time", input );
+            }
+
+            @Override
+            protected Clock clock( AnyValue when, AnyValue timezone )
+            {
+                Clock clock = clockProvider.apply( when( when ) );
+                if ( timezone != null )
+                {
+                    clock = clock.withZone( timezoneOf( timezone ) );
+                }
+                return clock;
+            }
+
             @Override
             protected ZoneId timezone( AnyValue timezone )
             {
-                return timezone == null ? defaultZone.get() : timezoneOf( timezone );
+                return timezone == null ? clockProvider.apply( when( null ) ).getZone() : timezoneOf( timezone );
+            }
+
+            @Override
+            protected TimeValue now()
+            {
+                return time( OffsetTime.now( clock() ) );
+            }
+
+            @Override
+            protected TimeValue fromEpoch( AnyValue epoch, boolean milli, AnyValue nano )
+            {
+                throw new UnsupportedOperationException( "not implemented" );
             }
 
             @Override
@@ -97,6 +127,13 @@ public final class TimeValue extends TemporalValue<OffsetTime,TimeValue>
                     AnyValue nanosecond )
             {
                 throw new UnsupportedOperationException( "not implemented" );
+            }
+
+            @Override
+            protected TimeValue truncate( TemporalUnit unit, AnyValue temporal )
+            {
+                OffsetTime time = offsetTime( temporal );
+                return time != null ? time( time.truncatedTo( unit ) ) : null;
             }
 
             private OffsetTime offsetTime( AnyValue value )
@@ -120,7 +157,7 @@ public final class TimeValue extends TemporalValue<OffsetTime,TimeValue>
         };
     }
 
-    public abstract static class Compiler<Input> extends TimeBuilder<Input,MethodHandle>
+    public abstract static class Compiler<Input> extends TimeBuilder<Input,Void,MethodHandle>
     {
     }
 
@@ -234,7 +271,7 @@ public final class TimeValue extends TemporalValue<OffsetTime,TimeValue>
         return zoneId instanceof ZoneOffset ? (ZoneOffset) zoneId : zoneId.getRules().getOffset( Instant.now() );
     }
 
-    abstract static class TimeBuilder<Input, Result> extends Builder<Input,Result>
+    abstract static class TimeBuilder<Input, CLOCK, Result> extends Builder<Input,CLOCK,Result>
     {
         @Override
         protected final boolean supportsDate()
@@ -392,6 +429,144 @@ public final class TimeValue extends TemporalValue<OffsetTime,TimeValue>
                 Input millisecond,
                 Input microsecond,
                 Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithSelectedTime( TemporalUnit unit, Input temporal, Input time )
+        {
+            throw new IllegalStateException( "cannot truncate time and select time" );
+        }
+
+        @Override
+        protected Result truncateWithCalendarDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input month, Input day, Input time )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithWeekDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input week, Input dayOfWeek, Input time )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithQuarterDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input quarter, Input dayOfQuarter, Input time )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithOrdinalDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input ordinalDay, Input time )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithConstructedTime(
+                TemporalUnit unit,
+                Input temporal,
+                Input hour,
+                Input minute,
+                Input second,
+                Input millisecond,
+                Input microsecond,
+                Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithCalendarDateAndConstructedTime(
+                TemporalUnit unit,
+                Input temporal,
+                Input month,
+                Input day,
+                Input hour,
+                Input minute,
+                Input second,
+                Input millisecond,
+                Input microsecond,
+                Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithWeekDateAndConstructedTime(
+                TemporalUnit unit,
+                Input temporal,
+                Input week,
+                Input dayOfWeek,
+                Input hour,
+                Input minute,
+                Input second,
+                Input millisecond,
+                Input microsecond,
+                Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithQuarterDateAndConstructedTime(
+                TemporalUnit unit,
+                Input temporal,
+                Input quarter,
+                Input dayOfQuarter,
+                Input hour,
+                Input minute,
+                Input second,
+                Input millisecond,
+                Input microsecond,
+                Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithOrdinalDateAndConstructedTime(
+                TemporalUnit unit,
+                Input temporal,
+                Input ordinalDay,
+                Input hour,
+                Input minute,
+                Input second,
+                Input millisecond,
+                Input microsecond,
+                Input nanosecond )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithCalendarDate(
+                TemporalUnit unit, Input temporal, Input month, Input day )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithWeekDate(
+                TemporalUnit unit, Input temporal, Input week, Input dayOfWeek )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithQuarterDate(
+                TemporalUnit unit, Input temporal, Input quarter, Input dayOfQuarter )
+        {
+            throw new IllegalStateException( "date not supported" );
+        }
+
+        @Override
+        protected Result truncateWithOrdinalDate( TemporalUnit unit, Input temporal, Input ordinalDay )
         {
             throw new IllegalStateException( "date not supported" );
         }

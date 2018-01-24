@@ -19,10 +19,24 @@
  */
 package org.neo4j.values.storable;
 
+import java.util.Map;
+
 import org.neo4j.values.AnyValue;
 
 public abstract class StructureBuilder<Input, Result>
 {
+    public abstract Result build( Input single );
+
+    public final Result build( Map<String,? extends Input> input )
+    {
+        StructureBuilder<Input,Result> builder = this;
+        for ( Map.Entry<String,? extends Input> entry : input.entrySet() )
+        {
+            builder = builder.add( entry.getKey(), entry.getValue() );
+        }
+        return builder.build();
+    }
+
     public abstract StructureBuilder<Input,Result> add( String field, Input value );
 
     public abstract Result build();
@@ -30,6 +44,23 @@ public abstract class StructureBuilder<Input, Result>
     StructureBuilder()
     {
         // Particular subclasses defined in this package
+    }
+
+    protected static String unpackString( String name, AnyValue value )
+    {
+        if ( value == null )
+        {
+            return null;
+        }
+        if ( value instanceof TextValue )
+        {
+            return ((TextValue) value).stringValue();
+        }
+        else
+        {
+            throw new IllegalArgumentException(
+                    name + " must be an string value, but was a " + value.getClass().getSimpleName() );
+        }
     }
 
     static long unpackInteger( String name, AnyValue value )

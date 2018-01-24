@@ -43,6 +43,12 @@ public final class InputMappingStructureBuilder<Input, Internal, Result> extends
     }
 
     @Override
+    public Result build( Input single )
+    {
+        return builder.build( mapping.apply( single ) );
+    }
+
+    @Override
     public StructureBuilder<Input,Result> add( String field, Input value )
     {
         builder.add( field, mapping.apply( value ) );

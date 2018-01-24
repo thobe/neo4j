@@ -34,7 +34,6 @@ import java.time.temporal.TemporalAdjuster;
 import java.time.temporal.TemporalField;
 import java.util.Objects;
 import java.util.function.Function;
-import java.util.function.Supplier;
 
 import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeDiagnosingMatcher;
@@ -47,7 +46,7 @@ import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 
-public class FrozenClockRule extends Clock implements TestRule, Function<String,Clock>, Supplier<ZoneId>
+public class FrozenClockRule extends Clock implements TestRule, Function<String,Clock>
 {
     @Target( ElementType.METHOD )
     @Retention( RetentionPolicy.RUNTIME )
@@ -120,12 +119,6 @@ public class FrozenClockRule extends Clock implements TestRule, Function<String,
     public Clock apply( String when )
     {
         return this;
-    }
-
-    @Override
-    public ZoneId get()
-    {
-        return zone;
     }
 
     @Override

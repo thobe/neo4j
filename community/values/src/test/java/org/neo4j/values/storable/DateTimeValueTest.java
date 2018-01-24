@@ -37,6 +37,8 @@ import static org.neo4j.values.storable.DateTimeValue.builder;
 import static org.neo4j.values.storable.DateTimeValue.datetime;
 import static org.neo4j.values.storable.DateTimeValue.parse;
 import static org.neo4j.values.storable.DateValue.date;
+import static org.neo4j.values.storable.FrozenClockRule.MILLISECOND_PRECISION;
+import static org.neo4j.values.storable.FrozenClockRule.SECOND_PRECISION;
 import static org.neo4j.values.storable.FrozenClockRule.assertEqualTemporal;
 import static org.neo4j.values.storable.InputMappingStructureBuilder.fromValues;
 import static org.neo4j.values.storable.LocalDateTimeValue.inUTC;
@@ -113,15 +115,36 @@ public class DateTimeValueTest
     {
         assertEqualTemporal(
                 datetime( ZonedDateTime.now( clock ) ),
-                DateTimeValue.now( clock ) );
+                builder( clock ).build() );
 
         assertEqualTemporal( // Using the named UTC timezone
                 datetime( ZonedDateTime.now( clock.withZone( "UTC" ) ) ),
-                DateTimeValue.now( clock, "UTC" ) );
+                builder( clock ).add( "timezone", stringValue( "UTC" ) ).build() );
 
         assertEqualTemporal( // Using the timezone defined as 0 hours offset from UTC
                 datetime( ZonedDateTime.now( clock.withZone( UTC ) ) ),
-                DateTimeValue.now( clock, "Z" ) );
+                builder( clock ).add( "timezone", stringValue( "Z" ) ).build() );
+    }
+
+    @Test
+    @FrozenClockRule.TimeZone( "UTC" )
+    public void shouldCreateDateTimeFromTimestamp() throws Exception
+    {
+        assertEqualTemporal(
+                datetime( ZonedDateTime.now( clock.with( SECOND_PRECISION ) ) ),
+                fromValues( builder( clock ) ).add( "ofEpochSecond", clock.millis() / 1000 ).build() );
+        assertEqualTemporal(
+                datetime( ZonedDateTime.now( clock.with( MILLISECOND_PRECISION ) ) ),
+                fromValues( builder( clock ) ).add( "ofEpochMilli", clock.millis() ).build() );
+        assertEqualTemporal(
+                datetime( ZonedDateTime.now( clock ) ),
+                fromValues( builder( clock ) )
+                        .add( "ofEpochSecond", clock.instant().getEpochSecond() )
+                        .add( "nanosecond", clock.instant().getNano() )
+                        .build() );
+        assertEqualTemporal(
+                datetime( ZonedDateTime.now( clock.with( MILLISECOND_PRECISION ) ) ),
+                fromValues( builder( clock ) ).build( clock.millis() ) );
     }
 
     @Test

@@ -20,6 +20,7 @@
 package org.neo4j.values.storable;
 
 import java.lang.invoke.MethodHandle;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.Period;
@@ -30,6 +31,7 @@ import java.time.temporal.TemporalAmount;
 import java.time.temporal.TemporalUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -56,8 +58,8 @@ import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableList;
 import static java.util.Objects.requireNonNull;
 import static java.util.regex.Pattern.CASE_INSENSITIVE;
-import static org.neo4j.values.storable.NumberType.NO_NUMBER;
 import static org.neo4j.values.storable.Comparison.comparison;
+import static org.neo4j.values.storable.NumberType.NO_NUMBER;
 
 /**
  * We use our own implementation because neither {@link java.time.Duration} nor {@link java.time.Period} fits our needs.
@@ -66,6 +68,8 @@ import static org.neo4j.values.storable.Comparison.comparison;
  */
 public final class DurationValue extends ScalarValue implements TemporalAmount
 {
+    public static final Function<Clock,StructureBuilder<AnyValue,? extends Value>> BUILDER_FACTORY = clock -> builder();
+
     public static DurationValue duration( Duration value )
     {
         requireNonNull( value, "Duration" );
@@ -107,12 +111,7 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
 
     public static DurationValue build( Map<String,? extends AnyValue> input )
     {
-        StructureBuilder<AnyValue,DurationValue> builder = builder();
-        for ( Map.Entry<String,? extends AnyValue> entry : input.entrySet() )
-        {
-            builder.add( entry.getKey(), entry.getValue() );
-        }
-        return builder.build();
+        return builder().build( input );
     }
 
     public static DurationValue build( MapValue map )
@@ -163,6 +162,21 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
         return new DurationBuilder<AnyValue,DurationValue>()
         {
             @Override
+            DurationValue createDuration( AnyValue input )
+            {
+                if ( input instanceof TextValue )
+                {
+                    return parse( (TextValue) input );
+                }
+                if ( input instanceof MapValue )
+                {
+                    ((MapValue) input).foreach( this::add );
+                    return build();
+                }
+                throw new IllegalArgumentException( "Invalid single input to duration(...): " + input );
+            }
+
+            @Override
             DurationValue create(
                     AnyValue years,
                     AnyValue months,
@@ -187,11 +201,33 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
                                 + unpackInteger( "microseconds", microseconds ) * 1_000
                                 + unpackInteger( "nanoseconds", nanoseconds ) );
             }
+
+            @Override
+            DurationValue between( Difference type, AnyValue from, AnyValue to )
+            {
+                return durationBetween( type, type.temporal( "from", from ), type.temporal( "to", to ) );
+            }
         };
     }
 
     public abstract static class Compiler<Input> extends DurationBuilder<Input,MethodHandle>
     {
+        // TODO: something like this...
+        @Override
+        MethodHandle create(
+                Input years,
+                Input months,
+                Input weeks,
+                Input days,
+                Input hours,
+                Input minutes,
+                Input seconds,
+                Input milliseconds,
+                Input microseconds,
+                Input nanoseconds )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
+        }
     }
 
     /**
@@ -528,6 +564,68 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
         return value == null ? 0 : parseLong( value );
     }
 
+    /**
+     * Compute the duration from one {@link Temporal} to another. If one temporal has a date and the other one does
+     * not, the one without a date is treated as being the same date as the one with date. If one temporal has a time
+     * and the other one does not, the one without a time is treated as midnight at the start of its date. If one
+     * temporal has a timezone and the other one does not, the one without a timezone is treated as having the same
+     * timezone as the one with a timezone.
+     */
+    private static DurationValue durationBetween( Difference type, Temporal from, Temporal to )
+    {
+        switch ( type )
+        {
+        case DEFAULT:
+            return durationBetween( from, to );
+        case years:
+            return yearsBetween( from, to );
+        case months:
+            return monthsBetween( from, to );
+        case weeks:
+            return weeksBetween( from, to );
+        case days:
+            return daysBetween( from, to );
+        case hours:
+            return hoursBetween( from, to );
+        case minutes:
+            return minutesBetween( from, to );
+        case seconds:
+            return difference( 0, 0, from, to );
+        default:
+            throw new UnsupportedOperationException( type.name() );
+        }
+    }
+
+    private static DurationValue yearsBetween( Temporal from, Temporal to )
+    {
+        return newDuration( from.until( to, YEARS ) * 12, 0, 0, 0 );
+    }
+
+    private static DurationValue monthsBetween( Temporal from, Temporal to )
+    {
+        return newDuration( from.until( to, MONTHS ), 0, 0, 0 );
+    }
+
+    private static DurationValue weeksBetween( Temporal from, Temporal to )
+    {
+        return newDuration( 0, from.until( to, WEEKS ) * 7, 0, 0 );
+    }
+
+    private static DurationValue daysBetween( Temporal from, Temporal to )
+    {
+        return newDuration( 0, from.until( to, DAYS ), 0, 0 );
+    }
+
+    private static DurationValue hoursBetween( Temporal from, Temporal to )
+    {
+        return newDuration( 0, 0, from.until( to, HOURS ) * 3600, 0 );
+    }
+
+    private static DurationValue minutesBetween( Temporal from, Temporal to )
+    {
+        return newDuration( 0, 0, from.until( to, MINUTES ) * 60, 0 );
+    }
+
     static DurationValue durationBetween( Temporal from, Temporal to )
     {
         long months = 0;
@@ -594,6 +692,45 @@ public final class DurationValue extends ScalarValue implements TemporalAmount
             nanos = to.getLong( NANO_OF_SECOND );
         }
         return duration( months, days, seconds, nanos );
+    }
+
+    enum Difference
+    {
+        DEFAULT,
+        years,
+        months,
+        weeks,
+        days,
+        hours,
+        minutes,
+        seconds,;
+
+        public DurationValue between( Temporal from, Temporal to )
+        {
+            return durationBetween( this, from, to );
+        }
+
+        private Temporal temporal( String field, AnyValue value )
+        {
+            if ( value instanceof TemporalValue )
+            {
+                return ((TemporalValue) value).temporal();
+            }
+            else
+            {
+                StringBuilder message = new StringBuilder().append( "'" );
+                if ( this == DEFAULT )
+                {
+                    message.append( field );
+                }
+                else
+                {
+                    message.append( name() ).append( Character.toUpperCase( field.charAt( 0 ) ) );
+                    message.append( field, 1, field.length() );
+                }
+                throw new IllegalArgumentException( message.append( "' must be a temporal value" ).toString() );
+            }
+        }
     }
 
     @Override

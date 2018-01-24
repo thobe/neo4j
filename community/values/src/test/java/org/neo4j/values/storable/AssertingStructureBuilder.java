@@ -83,11 +83,7 @@ public final class AssertingStructureBuilder<Input, Result> extends StructureBui
     {
         try
         {
-            for ( Map.Entry<String,Input> entry : input.entrySet() )
-            {
-                builder.add( entry.getKey(), entry.getValue() );
-            }
-            builder.build();
+            builder.build( input );
         }
         catch ( Exception expected )
         {
@@ -102,6 +98,12 @@ public final class AssertingStructureBuilder<Input, Result> extends StructureBui
     {
         input.put( field, value );
         return this;
+    }
+
+    @Override
+    public Result build( Input single )
+    {
+        throw new UnsupportedOperationException( "do not use this method" );
     }
 
     @Override

@@ -25,8 +25,8 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoField;
+import java.time.temporal.TemporalUnit;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,14 +69,43 @@ public final class LocalTimeValue extends TemporalValue<LocalTime,LocalTimeValue
         return parse( LocalTimeValue.class, PATTERN, LocalTimeValue::parse, text );
     }
 
-    public static StructureBuilder<AnyValue,LocalTimeValue> builder( Supplier<ZoneId> defaultZone )
+    public static StructureBuilder<AnyValue,LocalTimeValue> builder( Function<String,Clock> clockProvider )
     {
-        return new TimeValue.TimeBuilder<AnyValue,LocalTimeValue>()
+        return new TimeValue.TimeBuilder<AnyValue,Clock,LocalTimeValue>()
         {
+            @Override
+            protected LocalTimeValue fromSingle( AnyValue input )
+            {
+                return singleValue( ( text, zone ) -> parse( text ), "localtime", input );
+            }
+
+            @Override
+            protected Clock clock( AnyValue when, AnyValue timezone )
+            {
+                Clock clock = clockProvider.apply( when( when ) );
+                if ( timezone != null )
+                {
+                    clock = clock.withZone( timezoneOf( timezone ) );
+                }
+                return clock;
+            }
+
             @Override
             protected ZoneId timezone( AnyValue timezone )
             {
-                return timezone == null ? defaultZone.get() : timezoneOf( timezone );
+                return timezone == null ? clockProvider.apply( when( null ) ).getZone() : timezoneOf( timezone );
+            }
+
+            @Override
+            protected LocalTimeValue now()
+            {
+                throw new UnsupportedOperationException( "not implemented" );
+            }
+
+            @Override
+            protected LocalTimeValue fromEpoch( AnyValue epoch, boolean milli, AnyValue nano )
+            {
+                throw new UnsupportedOperationException( "not implemented" );
             }
 
             @Override
@@ -96,10 +125,16 @@ public final class LocalTimeValue extends TemporalValue<LocalTime,LocalTimeValue
             {
                 throw new UnsupportedOperationException( "not implemented" );
             }
+
+            @Override
+            protected LocalTimeValue truncate( TemporalUnit unit, AnyValue temporal )
+            {
+                throw new UnsupportedOperationException( "not implemented" );
+            }
         };
     }
 
-    public abstract static class Compiler<Input> extends TimeValue.TimeBuilder<Input,MethodHandle>
+    public abstract static class Compiler<Input> extends TimeValue.TimeBuilder<Input,Void,MethodHandle>
     {
     }
 

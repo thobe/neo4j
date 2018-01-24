@@ -19,9 +19,12 @@
  */
 package org.neo4j.values.storable;
 
+import java.lang.invoke.MethodHandle;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.ChronoField;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.Temporal;
 import java.time.temporal.TemporalAdjuster;
@@ -39,8 +42,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.neo4j.values.AnyValue;
+import org.neo4j.values.virtual.MapValue;
 
-import static org.neo4j.values.storable.DateTimeValue.parseZoneName;
 import static org.neo4j.values.storable.NumberType.NO_NUMBER;
 
 public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<T,V>>
@@ -259,25 +262,22 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         return name.substring( 0, name.length() - /*"Value" is*/5/*characters*/ );
     }
 
-    abstract static class Builder<Input, Result> extends StructureBuilder<Input,Result>
+    abstract static class Builder<Input, CLOCK, Result> extends StructureBuilder<Input,Result>
     {
         private BuilderState<Input> state;
         private Input timezone;
+        private Input when;
 
         @Override
         public final Result build()
         {
-            if ( state == null )
-            {
-                throw new IllegalArgumentException( "Builder state empty" );
-            }
-            return state.build( this );
+            return state == null ? now() : state.build( this );
         }
 
         @Override
         public final StructureBuilder<Input,Result> add( String fieldName, Input value )
         {
-            Field field = Field.fields.get( fieldName.toLowerCase() );
+            InputField field = InputField.fields.get( fieldName.toLowerCase() );
             if ( field == null )
             {
                 throw new IllegalArgumentException( "No such field: " + fieldName );
@@ -286,25 +286,70 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
             return this;
         }
 
-        @SuppressWarnings( "BooleanMethodIsAlwaysInverted" )
-        private boolean supports( TemporalField field )
+        @Override
+        public final Result build( Input single )
         {
-            if ( field.isDateBased() )
+            if ( state != null )
+            {
+                throw new IllegalStateException( "Cannot build from single parameter after supplying named "
+                        + "parameters" );
+            }
+            return fromSingle( single );
+        }
+
+        protected abstract Result fromSingle( Input input );
+
+        @SuppressWarnings( "BooleanMethodIsAlwaysInverted" )
+        private boolean supports( Field field )
+        {
+            if ( field.field.isDateBased() )
             {
                 return supportsDate();
             }
-            if ( field.isTimeBased() )
+            if ( field.field.isTimeBased() )
             {
                 return supportsTime();
             }
             throw new IllegalStateException( "Fields should be either date based or time based" );
         }
 
+        final Result singleValue( BiFunction<TextValue,Supplier<ZoneId>,Result> parser, String name, AnyValue input )
+        {
+            if ( input instanceof TextValue )
+            {
+                return parser.apply( (TextValue) input, this::timezone );
+            }
+            if ( input instanceof MapValue )
+            {
+                for ( Map.Entry<String,AnyValue> entry : ((MapValue) input).entrySet() )
+                {
+                    @SuppressWarnings( "unchecked"/*this is safe because of where this method is used*/ )
+                    Input value = (Input) entry.getValue();
+                    add( entry.getKey(), value );
+                }
+                return build();
+            }
+            if ( input instanceof IntegralValue )
+            {
+                // convert from millisecond timestamp
+                @SuppressWarnings( "unchecked"/*this is safe because of where this method is used*/ )
+                Input value = (Input) input;
+                return fromEpoch( value, true, null );
+            }
+            throw new IllegalArgumentException( "Invalid single input to " + name + "(...): " + input );
+        }
+
         protected abstract boolean supportsDate();
 
         protected abstract boolean supportsTime();
 
+        protected abstract CLOCK clock( Input when, Input timezone );
+
         protected abstract ZoneId timezone( Input timezone );
+
+        protected abstract Result now();
+
+        protected abstract Result fromEpoch( Input epoch, boolean milli, Input nano );
 
         // Selection
 
@@ -370,6 +415,69 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
                 Input year, Input ordinalDay,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
 
+        // Truncation
+
+        protected abstract Result truncate( TemporalUnit unit, Input temporal );
+
+        protected abstract Result truncateWithSelectedTime( TemporalUnit unit, Input temporal, Input time );
+
+        protected abstract Result truncateWithConstructedTime(
+                TemporalUnit unit, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
+
+        // - with calendar date
+
+        protected abstract Result truncateWithCalendarDate(
+                TemporalUnit unit, Input temporal, Input month, Input day );
+
+        protected abstract Result truncateWithCalendarDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input month, Input day, Input time );
+
+        protected abstract Result truncateWithCalendarDateAndConstructedTime(
+                TemporalUnit unit, Input temporal, Input month, Input day,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
+
+        // - with week date
+
+        protected abstract Result truncateWithWeekDate(
+                TemporalUnit unit, Input temporal, Input week, Input dayOfWeek );
+
+        protected abstract Result truncateWithWeekDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input week, Input dayOfWeek, Input time );
+
+        protected abstract Result truncateWithWeekDateAndConstructedTime(
+                TemporalUnit unit, Input temporal, Input week, Input dayOfWeek,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
+
+        // - with quarter date
+
+        protected abstract Result truncateWithQuarterDate(
+                TemporalUnit unit, Input temporal, Input quarter, Input dayOfQuarter );
+
+        protected abstract Result truncateWithQuarterDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input quarter, Input dayOfQuarter, Input time );
+
+        protected abstract Result truncateWithQuarterDateAndConstructedTime(
+                TemporalUnit unit, Input temporal, Input quarter, Input dayOfQuarter,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
+
+        // - with ordinal date
+
+        protected abstract Result truncateWithOrdinalDate(
+                TemporalUnit unit, Input temporal, Input ordinalDay );
+
+        protected abstract Result truncateWithOrdinalDateAndSelectedTime(
+                TemporalUnit unit, Input temporal, Input ordinalDay, Input time );
+
+        protected abstract Result truncateWithOrdinalDateAndConstructedTime(
+                TemporalUnit unit, Input temporal, Input ordinalDay,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
+
+        protected final CLOCK clock()
+        {
+            return clock( when, timezone );
+        }
+
         protected final ZoneId optionalTimezone()
         {
             return timezone == null ? null : timezone();
@@ -384,9 +492,244 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         {
             if ( timezone instanceof TextValue )
             {
-                return parseZoneName( ((TextValue) timezone).stringValue() );
+                return ZoneId.of( ((TextValue) timezone).stringValue() );
             }
             throw new UnsupportedOperationException( "Cannot convert to ZoneId: " + timezone );
+        }
+
+        final String when( AnyValue when )
+        {
+            String name = unpackString( "when", when );
+            return name == null ? DEFAULT_WHEN : name;
+        }
+
+        final Instant instant( AnyValue epoch, boolean milli, AnyValue nano )
+        {
+            if ( milli )
+            {
+                return Instant.ofEpochMilli( unpackInteger( InputField.ofEpochMilli.name(), epoch ) );
+            }
+            else if ( nano == null )
+            {
+                return Instant.ofEpochSecond( unpackInteger( InputField.ofEpochSecond.name(), epoch ) );
+            }
+            else
+            {
+                return Instant.ofEpochSecond(
+                        unpackInteger( InputField.ofEpochSecond.name(), epoch ),
+                        unpackInteger( InputField.nanosecond.name(), nano ) );
+            }
+        }
+
+        final MethodHandle timezoneProvider()
+        {
+            throw new UnsupportedOperationException( "not implemented" );
+        }
+    }
+
+    private enum InputField
+    {
+        // construction
+        year( Field.year ),
+        month( Field.month ),
+        day( Field.day ),
+        week( Field.week ),
+        dayOfWeek( Field.dayOfWeek ),
+        quarter( Field.quarter ),
+        dayOfQuarter( Field.dayOfQuarter ),
+        ordinalDay( Field.ordinalDay ),
+        hour( Field.hour ),
+        minute( Field.minute ),
+        second( Field.second ),
+        millisecond( Field.millisecond ),
+        microsecond( Field.microsecond ),
+        nanosecond( Field.nanosecond ),
+        when//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                if ( builder.when != null )
+                {
+                    throw new IllegalArgumentException( "cannot assign when twice" );
+                }
+                builder.when = value;
+            }
+        },
+        timezone//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                if ( builder.timezone != null )
+                {
+                    throw new IllegalArgumentException( "cannot assign timezone twice" );
+                }
+                builder.timezone = value;
+            }
+        },
+        // group selectors
+        date//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                if ( builder.state == null )
+                {
+                    builder.state = new DateTimeBuilder<>();
+                }
+                builder.state = builder.state.date( value );
+            }
+        },
+        time//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                if ( builder.state == null )
+                {
+                    builder.state = new DateTimeBuilder<>();
+                }
+                builder.state = builder.state.time( value );
+            }
+        },
+        datetime//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                if ( builder.state == null )
+                {
+                    builder.state = new SelectDateTime<>( value );
+                }
+                else
+                {
+                    throw new IllegalArgumentException( "Cannot select datetime when assigning other fields." );
+                }
+            }
+        },
+        ofEpochSecond//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                epochState( builder, value, false );
+            }
+        },
+        ofEpochMilli//<pre>
+        { //</pre>
+
+            @Override
+            <Input> void assign( Builder<Input,?,?> builder, Input value )
+            {
+                epochState( builder, value, true );
+            }
+        },
+        // truncation
+        millenniumOf( Truncation.millennium ),
+        centuryOf( Truncation.century ),
+        decadeOf( Truncation.decade ),
+        yearOf( Truncation.year ),
+        quarterOf( Truncation.quarter ),
+        monthOf( Truncation.month ),
+        weekOf( Truncation.week ),
+        dayOf( Truncation.day ),
+        hourOf( Truncation.hour ),
+        minuteOf( Truncation.minute ),
+        secondOf( Truncation.second ),
+        millisecondOf( Truncation.millisecond ),
+        microsecondOf( Truncation.microsecond );
+        private static final Map<String,InputField> fields = new HashMap<>();
+
+        static
+        {
+            for ( InputField field : values() )
+            {
+                fields.put( field.name().toLowerCase(), field );
+            }
+            // aliases
+            fields.put( "weekday", dayOfWeek );
+            fields.put( "quarterday", dayOfQuarter );
+        }
+
+        private static <Input> void epochState( Builder<Input,?,?> builder, Input value, boolean milli )
+        {
+            if ( builder.state == null )
+            {
+                builder.state = new CreateEpoch<>( value, milli );
+                return;
+            }
+            else if ( builder.state instanceof DateTimeBuilder<?> )
+            {
+                DateTimeBuilder<Input> state = (DateTimeBuilder<Input>) builder.state;
+                if ( state.date == null && state.time instanceof ConstructTime<?> )
+                {
+                    ConstructTime<Input> time = (ConstructTime<Input>) state.time;
+                    CreateEpoch<Input> epochState = new CreateEpoch<>( value, milli );
+                    time.assignTo( epochState );
+                    builder.state = epochState;
+                    return;
+                }
+            }
+            throw new IllegalArgumentException( "Cannot create from epoch when assigning other fields." );
+        }
+
+        private final Field construction;
+        private final Truncation truncation;
+
+        InputField( Field construction )
+        {
+            this.construction = construction;
+            this.truncation = null;
+        }
+
+        InputField()
+        {
+            this.construction = null;
+            this.truncation = null;
+        }
+
+        InputField( Truncation truncation )
+        {
+            this.construction = null;
+            this.truncation = truncation;
+        }
+
+        <Input> void assign( Builder<Input,?,?> builder, Input value )
+        {
+            if ( construction != null )
+            {
+                if ( !builder.supports( construction ) )
+                {
+                    throw new IllegalArgumentException( "Not supported: " + name() );
+                }
+                if ( builder.state == null )
+                {
+                    builder.state = new DateTimeBuilder<>();
+                }
+                builder.state = builder.state.assign( construction, value );
+            }
+            if ( truncation != null )
+            {
+                if ( !builder.supports( truncation.field ) )
+                {
+                    throw new IllegalArgumentException( "Not supported: " + name() );
+                }
+                if ( builder.state == null )
+                {
+                    builder.state = new Truncate<>( truncation, value );
+                }
+                else
+                {
+                    builder.state = builder.state.truncate( truncation, value );
+                }
+            }
         }
     }
 
@@ -405,100 +748,61 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         second( ChronoField.SECOND_OF_MINUTE ),
         millisecond( ChronoField.MILLI_OF_SECOND ),
         microsecond( ChronoField.MICRO_OF_SECOND ),
-        nanosecond( ChronoField.NANO_OF_SECOND ),
-        timezone//<pre>
-        { //</pre>
-
-            @Override
-            <Input> void assign( Builder<Input,?> builder, Input value )
-            {
-                if ( builder.timezone != null )
-                {
-                    throw new IllegalArgumentException( "cannot assign timezone twice" );
-                }
-                builder.timezone = value;
-            }
-        },
-        // group selectors
-        date//<pre>
-        { //</pre>
-
-            @Override
-            <Input> void assign( Builder<Input,?> builder, Input value )
-            {
-                if ( builder.state == null )
-                {
-                    builder.state = new DateTimeBuilder<>();
-                }
-                builder.state = builder.state.date( value );
-            }
-        },
-        time//<pre>
-        { //</pre>
-
-            @Override
-            <Input> void assign( Builder<Input,?> builder, Input value )
-            {
-                if ( builder.state == null )
-                {
-                    builder.state = new DateTimeBuilder<>();
-                }
-                builder.state = builder.state.time( value );
-            }
-        },
-        datetime//<pre>
-        { //</pre>
-
-            @Override
-            <Input> void assign( Builder<Input,?> builder, Input value )
-            {
-                if ( builder.state == null )
-                {
-                    builder.state = new SelectDateTime<>( value );
-                }
-                else
-                {
-                    throw new IllegalArgumentException( "Cannot select datetime when assigning other fields." );
-                }
-            }
-        };
-        private static final Map<String,Field> fields = new HashMap<>();
-
-        static
-        {
-            for ( Field field : values() )
-            {
-                fields.put( field.name().toLowerCase(), field );
-            }
-            // aliases
-            fields.put( "weekday", dayOfWeek );
-            fields.put( "quarterday", dayOfQuarter );
-        }
-
-        private final TemporalField field;
+        nanosecond( ChronoField.NANO_OF_SECOND );
+        final TemporalField field;
 
         Field( TemporalField field )
         {
             this.field = field;
         }
+    }
 
-        Field()
+    private enum Truncation
+    {
+        millennium( Field.year, ChronoUnit.MILLENNIA ),
+        century( Field.year, ChronoUnit.CENTURIES ),
+        decade( Field.year, ChronoUnit.DECADES ),
+        year( Field.year, ChronoUnit.YEARS ),
+        quarter( Field.quarter, IsoFields.QUARTER_YEARS ),
+        month( Field.month, ChronoUnit.MONTHS ),
+        week( Field.week, ChronoUnit.WEEKS ),
+        day( Field.day, ChronoUnit.DAYS ),
+        hour( Field.hour, ChronoUnit.HOURS ),
+        minute( Field.minute, ChronoUnit.MINUTES ),
+        second( Field.second, ChronoUnit.SECONDS ),
+        millisecond( Field.millisecond, ChronoUnit.MILLIS ),
+        microsecond( Field.microsecond, ChronoUnit.MICROS );
+        private final Field field;
+        final TemporalUnit unit;
+
+        Truncation( Field field, TemporalUnit unit )
         {
-            this.field = null;
+            this.field = field;
+            this.unit = unit;
         }
 
-        <Input> void assign( Builder<Input,?> builder, Input value )
+        @SuppressWarnings( "BooleanMethodIsAlwaysInverted" )
+        boolean allows( Field field )
         {
-            assert field != null : "method should have been overridden";
-            if ( !builder.supports( field ) )
+            switch ( this )
             {
-                throw new IllegalArgumentException( "Not supported: " + name() );
+            case quarter:
+                if ( field == Field.dayOfQuarter )
+                {
+                    return true;
+                }
+            case month:
+                return field.ordinal() >= Field.day.ordinal();
+            case week:
+                if ( field == Field.dayOfWeek )
+                {
+                    return true;
+                }
+            case day:
+                return field.ordinal() >= Field.hour.ordinal();
+            default:
+                return field.ordinal() > this.field.ordinal();
             }
-            if ( builder.state == null )
-            {
-                builder.state = new DateTimeBuilder<>();
-            }
-            builder.state = builder.state.assign( this, value );
         }
     }
 
@@ -506,11 +810,104 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
     {
         abstract BuilderState<Input> assign( Field field, Input value );
 
+        abstract BuilderState<Input> truncate( Truncation truncation, Input value );
+
         abstract BuilderState<Input> date( Input date );
 
         abstract BuilderState<Input> time( Input time );
 
-        abstract <Result> Result build( Builder<Input,Result> builder );
+        abstract <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder );
+    }
+
+    private static final class Truncate<Input> extends BuilderState<Input>
+    {
+        private final Truncation truncation;
+        private final Input temporal;
+        private ConstructDate<Input> date;
+        private TimeBuilder<Input> time;
+
+        Truncate( Truncation truncation, Input temporal )
+        {
+            this.truncation = truncation;
+            this.temporal = temporal;
+        }
+
+        @Override
+        BuilderState<Input> assign( Field field, Input value )
+        {
+            if ( !truncation.allows( field ) )
+            {
+                throw new IllegalArgumentException( "Cannot assign " + field + " when truncating by " + truncation );
+            }
+            if ( field.field.isTimeBased() )
+            {
+                if ( time == null )
+                {
+                    time = new ConstructTime<>();
+                }
+                time.assign( field, value );
+            }
+            else
+            {
+                if ( date == null )
+                {
+                    date = new ConstructDate<>();
+                }
+                date = date.assign( field, value );
+            }
+            return this;
+        }
+
+        @Override
+        BuilderState<Input> truncate( Truncation truncation, Input value )
+        {
+            throw new IllegalArgumentException( "cannot truncate by both " + this.truncation + " and " + truncation );
+        }
+
+        @Override
+        BuilderState<Input> date( Input date )
+        {
+            throw new IllegalArgumentException( "cannot select date when truncating" );
+        }
+
+        @Override
+        BuilderState<Input> time( Input time )
+        {
+            if ( !truncation.allows( Field.hour ) )
+            {
+                throw new IllegalArgumentException( "cannot select time when truncating by " + truncation );
+            }
+            if ( this.time != null )
+            {
+                throw new IllegalArgumentException( "cannot select time when also assigning time" );
+            }
+            this.time = new SelectTime<>( time );
+            return this;
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
+        {
+            if ( time == null )
+            {
+                if ( date == null )
+                {
+                    return builder.truncate( truncation.unit, temporal );
+                }
+                else
+                {
+                    return date.truncate( builder, truncation, temporal );
+                }
+            }
+            else if ( date == null )
+            {
+                return time.truncate( builder, truncation, temporal );
+            }
+            else
+            {
+                return time.truncate( builder, truncation, temporal, date );
+            }
+        }
     }
 
     private static final class SelectDateTime<Input> extends BuilderState<Input>
@@ -529,6 +926,12 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
+        BuilderState<Input> truncate( Truncation truncation, Input value )
+        {
+            throw new IllegalArgumentException( "cannot truncate when selecting datetime" );
+        }
+
+        @Override
         BuilderState<Input> date( Input date )
         {
             throw new IllegalArgumentException( "cannot select date when selecting datetime" );
@@ -541,9 +944,63 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.selectDateTime( datetime );
+        }
+    }
+
+    private static final class CreateEpoch<Input> extends BuilderState<Input>
+    {
+        private final boolean milli;
+        private final Input epoch;
+        private Input nano;
+
+        CreateEpoch( Input epoch, boolean milli )
+        {
+            this.epoch = epoch;
+            this.milli = milli;
+        }
+
+        @Override
+        BuilderState<Input> assign( Field field, Input value )
+        {
+            switch ( field )
+            {
+            case nanosecond:
+                if ( !milli )
+                {
+                    nano = assignment( field, nano, value );
+                    return this;
+                }
+            default:
+                throw new IllegalArgumentException( "cannot assign " + field + " when constructing from epoch in "
+                        + (milli ? "milliseconds" : "seconds") );
+            }
+        }
+
+        @Override
+        BuilderState<Input> truncate( Truncation truncation, Input value )
+        {
+            throw new IllegalArgumentException( "cannot truncate when constructing from epoch" );
+        }
+
+        @Override
+        BuilderState<Input> date( Input date )
+        {
+            throw new IllegalArgumentException( "cannot select date when constructing from epoch" );
+        }
+
+        @Override
+        BuilderState<Input> time( Input time )
+        {
+            throw new IllegalArgumentException( "cannot select time when constructing from epoch" );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
+        {
+            return builder.fromEpoch( epoch, milli, nano );
         }
     }
 
@@ -575,6 +1032,21 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
+        BuilderState<Input> truncate( Truncation truncation, Input value )
+        {
+            Truncate<Input> state = new Truncate<>( truncation, value );
+            if ( date != null )
+            {
+                date.assignTo( state );
+            }
+            if ( time != null )
+            {
+                time.assignTo( state );
+            }
+            return state;
+        }
+
+        @Override
         BuilderState<Input> date( Input date )
         {
             if ( this.date != null )
@@ -597,11 +1069,18 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             if ( time == null )
             {
-                return date.build( builder );
+                if ( date == null )
+                {
+                    return builder.now();
+                }
+                else
+                {
+                    return date.build( builder );
+                }
             }
             else if ( date == null )
             {
@@ -618,12 +1097,14 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
     {
         abstract DateBuilder<Input> assign( Field field, Input value );
 
-        abstract <Result> Result build( Builder<Input,Result> builder );
+        abstract void assignTo( BuilderState<Input> state );
 
-        abstract <Result> Result selectTime( Input time, Builder<Input,Result> builder );
+        abstract <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder );
 
-        abstract <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        abstract <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder );
+
+        abstract <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond );
     }
 
@@ -631,9 +1112,18 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
     {
         abstract void assign( Field field, Input value );
 
-        abstract <Result> Result build( Builder<Input,Result> builder );
+        abstract void assignTo( BuilderState<Input> state );
 
-        abstract <Result> Result build( Builder<Input,Result> builder, DateBuilder<Input> date );
+        abstract <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder );
+
+        abstract <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder, DateBuilder<Input> date );
+
+        abstract <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal );
+
+        abstract <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                ConstructDate<Input> date );
     }
 
     private static final class SelectDate<Input> extends DateBuilder<Input>
@@ -652,20 +1142,26 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            throw new IllegalArgumentException( "cannot truncate when selecting date" );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.selectDate( temporal );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             return builder.selectDateAndTime( temporal, time );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             return builder.selectDateWithConstructedTime(
@@ -695,15 +1191,34 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            state.time( temporal );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.selectTime( temporal );
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder, DateBuilder<Input> date )
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder, DateBuilder<Input> date )
         {
             return date.selectTime( temporal, builder );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            return builder.truncateWithSelectedTime( truncation.unit, temporal, this.temporal );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal, ConstructDate<Input> date )
+        {
+            return date.truncate( builder, truncation, temporal, this.temporal );
         }
     }
 
@@ -745,16 +1260,43 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            propagate( state, Field.hour, hour );
+            propagate( state, Field.minute, minute );
+            propagate( state, Field.second, second );
+            propagate( state, Field.millisecond, millisecond );
+            propagate( state, Field.microsecond, microsecond );
+            propagate( state, Field.nanosecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
 
             return builder.constructTime( hour, minute, second, millisecond, microsecond, nanosecond );
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder, DateBuilder<Input> date )
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder, DateBuilder<Input> date )
         {
             return date.constructTime( builder, hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            return builder.truncateWithConstructedTime(
+                    truncation.unit, temporal, hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                ConstructDate<Input> date )
+        {
+            return date.truncate( builder, truncation, temporal,
+                    hour, minute, second, millisecond, microsecond, nanosecond );
         }
     }
 
@@ -787,23 +1329,47 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            propagate( state, Field.year, year );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructYear( year );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             throw new IllegalStateException( "Cannot specify time for a year." );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             throw new IllegalStateException( "Cannot specify time for a year." );
+        }
+
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            throw new IllegalStateException( "Cannot change the year when truncating." );
+        }
+
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
+        {
+            throw new IllegalStateException( "Cannot change the year when truncating." );
+        }
+
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal, Input time )
+        {
+            throw new IllegalStateException( "Cannot change the year when truncating." );
         }
     }
 
@@ -837,24 +1403,46 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            super.assignTo( state );
+            propagate( state, Field.month, month );
+            propagate( state, Field.day, day );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructCalendarDate( year, month, day );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructCalendarDateWithSelectedTime( year, month, day, time );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             return builder.constructCalendarDateWithConstructedTime( year, month, day,
                     hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
         }
     }
 
@@ -888,24 +1476,46 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            super.assignTo( state );
+            propagate( state, Field.week, week );
+            propagate( state, Field.dayOfWeek, dayOfWeek );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructWeekDate( year, week, dayOfWeek );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructWeekDateWithSelectedTime( year, week, dayOfWeek, time );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             return builder.constructWeekDateWithConstructedTime( year, week, dayOfWeek,
                     hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
         }
     }
 
@@ -939,24 +1549,46 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            super.assignTo( state );
+            propagate( state, Field.quarter, quarter );
+            propagate( state, Field.dayOfQuarter, dayOfQuarter );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructQuarterDate( year, quarter, dayOfQuarter );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructQuarterDateWithSelectedTime( year, quarter, dayOfQuarter, time );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             return builder.constructQuarterDateWithConstructedTime( year, quarter, dayOfQuarter,
                     hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
+        {
+            throw new UnsupportedOperationException( "not implemented" );
         }
     }
 
@@ -986,24 +1618,46 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
         }
 
         @Override
-        <Result> Result build( Builder<Input,Result> builder )
+        void assignTo( BuilderState<Input> state )
+        {
+            super.assignTo( state );
+            propagate( state, Field.ordinalDay, ordinalDay );
+        }
+
+        @Override
+        <Result,CLOCK> Result build( Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructOrdinalDate( year, ordinalDay );
         }
 
         @Override
-        <Result> Result selectTime( Input time, Builder<Input,Result> builder )
+        <Result,CLOCK> Result selectTime( Input time, Builder<Input,CLOCK,Result> builder )
         {
             return builder.constructOrdinalDateWithSelectedTime( year, ordinalDay, time );
         }
 
         @Override
-        <Result> Result constructTime(
-                Builder<Input,Result> builder,
+        <Result,CLOCK> Result constructTime(
+                Builder<Input,CLOCK,Result> builder,
                 Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
         {
             return builder.constructOrdinalDateWithConstructedTime( year, ordinalDay,
                     hour, minute, second, millisecond, microsecond, nanosecond );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate( Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal )
+        {
+            return builder.truncateWithOrdinalDate( truncation.unit, temporal, ordinalDay );
+        }
+
+        @Override
+        <Result,CLOCK> Result truncate(
+                Builder<Input,CLOCK,Result> builder, Truncation truncation, Input temporal,
+                Input hour, Input minute, Input second, Input millisecond, Input microsecond, Input nanosecond )
+        {
+            return builder.truncateWithOrdinalDateAndConstructedTime(
+                    truncation.unit, temporal, ordinalDay, hour, minute, second, millisecond, microsecond, nanosecond );
         }
     }
 
@@ -1014,5 +1668,13 @@ public abstract class TemporalValue<T extends Temporal, V extends TemporalValue<
             throw new IllegalArgumentException( "cannot re-assign " + field );
         }
         return newValue;
+    }
+
+    private static <Input> void propagate( BuilderState<Input> state, Field field, Input value )
+    {
+        if ( value != null )
+        {
+            state.assign( field, value );
+        }
     }
 }

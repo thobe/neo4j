@@ -19,12 +19,17 @@
  */
 package org.neo4j.values.storable;
 
+import java.time.ZoneId;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.neo4j.helpers.collection.MapUtil.entry;
+import static org.neo4j.values.storable.DateTimeValue.datetime;
+import static org.neo4j.values.storable.DateValue.date;
 import static org.neo4j.values.storable.DurationValue.build;
 import static org.neo4j.values.storable.DurationValue.parse;
+import static org.neo4j.values.storable.LocalTimeValue.localTime;
 import static org.neo4j.values.storable.Values.of;
 
 public class DurationBuilderTest
@@ -60,5 +65,28 @@ public class DurationBuilderTest
                         .entry( "microseconds", of( -900_000 ) )
                         .entry( "nanoseconds", of( 900_000_009 ) )
                         .create() ) );
+    }
+
+    @Test
+    public void shouldBuildDurationBetween() throws Exception
+    {
+        // given
+        Value a = datetime(
+                date( 1984, 10, 11 ),
+                localTime( 21, 30, 42, 123_000_000 ),
+                ZoneId.of( "Europe/Stockholm" ) );
+        Value b = datetime(
+                date( 2017, 12, 23 ),
+                localTime( 11, 30, 19, 456_000_000 ),
+                ZoneId.of( "Europe/Stockholm" ) );
+
+        // then
+        assertEquals( parse( "P33Y2M12DT-10H-21.667S" ), build( entry( "from", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "P33Y" ), build( entry( "yearsFrom", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "P1732W" ), build( entry( "weeksFrom", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "P12125D" ), build( entry( "daysFrom", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "PT291013H" ), build( entry( "hoursFrom", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "PT17460839M" ), build( entry( "minutesFrom", a ).entry( "to", b ).create() ) );
+        assertEquals( parse( "PT1047650377.333S" ), build( entry( "secondsFrom", a ).entry( "to", b ).create() ) );
     }
 }
